@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"encoding/binary"
@@ -53,7 +53,7 @@ type ModelConnection struct {
 	remoteSubEventCh   chan updateSubTableMsg             // 更新远端事件订阅通道, 会触发订阅事件报文发送
 	querySubState      chan chan []string                 // 查询状态订阅通道
 	querySubEvent      chan chan []string                 // 查询事件订阅通道
-	removeConnCh       chan *ModelConnection              // 删除连接通道
+	removeConnCh       chan<- *ModelConnection            // 删除连接通道
 	stateBroadcast     chan<- message.StateOrEventMessage // 状态广播通道
 	eventBroadcast     chan<- message.StateOrEventMessage // 事件广播通道
 	stateWriteChan     chan message.StateOrEventMessage   // 状态写入通道
