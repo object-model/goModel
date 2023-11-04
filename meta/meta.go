@@ -42,7 +42,7 @@ type MethodMeta struct {
 }
 
 type Meta struct {
-	Name        string       `json:"name"`
+	Name        string       `json:"name"` // 物模型名称
 	Description string       `json:"description"`
 	Version     string       `json:"version"`
 	State       []ParamMeta  `json:"state"`

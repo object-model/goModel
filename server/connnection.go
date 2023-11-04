@@ -7,6 +7,7 @@ import (
 	"net"
 	"proxy/message"
 	"proxy/meta"
+	"strings"
 	"sync"
 	"time"
 )
@@ -56,12 +57,16 @@ type ModelConnection struct {
 	removeConnCh       chan<- *ModelConnection            // 删除连接通道
 	stateBroadcast     chan<- message.StateOrEventMessage // 状态广播通道
 	eventBroadcast     chan<- message.StateOrEventMessage // 事件广播通道
+	callChan           chan<- message.CallMessage         // 调用请求通道
+	respChan           chan<- message.ResponseMessage     // 响应结果通道
 	stateWriteChan     chan message.StateOrEventMessage   // 状态写入通道
 	eventWriteChan     chan message.StateOrEventMessage   // 事件写入通道
+	callWriteChan      chan message.CallMessage           // 调用写入通道
+	respWriteChan      chan message.ResponseMessage       // 响应写入通道
 	queryProxyMetaChan chan struct{}                      // 查询代理物模型消息通道
 	queryMetaChan      chan struct{}                      // 查询元信息通道
 	metaGotChan        chan struct{}                      // 收到元信息消息通道
-	queryOnce          sync.Once                          // 保证只查询异常元信息
+	queryOnce          sync.Once                          // 保证只查询一次元信息
 	onGetMetaOnce      sync.Once                          // 保证只响应一次元信息结果报文
 	quitOnce           sync.Once                          // 保证只退出一次
 	MetaInfo           message.MetaMessage                // 元信息
@@ -163,7 +168,7 @@ func (c *ModelConnection) queryMeta(timeout time.Duration) error {
 	case <-time.After(timeout):
 		return fmt.Errorf("timeout")
 	case <-c.metaGotChan:
-		return nil
+		break
 	}
 
 	return nil
@@ -173,7 +178,6 @@ func (c *ModelConnection) reader() {
 	defer func() {
 		c.removeConnCh <- c
 	}()
-	defer c.Close()
 	for {
 		// 读取报文
 		data, err := c.readMsg()
@@ -196,22 +200,6 @@ func (c *ModelConnection) reader() {
 			break
 		}
 	}
-}
-
-func (c *ModelConnection) readMsg() ([]byte, error) {
-	// 读取长度
-	var length uint32
-	err := binary.Read(c, binary.LittleEndian, &length)
-	if err != nil {
-		return nil, err
-	}
-
-	// 读取数据
-	data := make([]byte, length)
-	if err = binary.Read(c, binary.LittleEndian, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
 }
 
 func (c *ModelConnection) writer() {
@@ -241,6 +229,14 @@ func (c *ModelConnection) writer() {
 		// 事件发布
 		case event := <-c.eventWriteChan:
 			c.pubStateOrEvent(wantedEvents, event)
+
+		// 调用消息
+		case call := <-c.callWriteChan:
+			_, _ = c.Write(call.FullData)
+
+		// 调用响应
+		case resp := <-c.respWriteChan:
+			_, _ = c.Write(resp.FullData)
 
 		// 更新连接本地的订阅状态列表
 		case stateReq := <-c.localSubStateCh:
@@ -277,6 +273,22 @@ func (c *ModelConnection) writer() {
 	}
 }
 
+func (c *ModelConnection) readMsg() ([]byte, error) {
+	// 读取长度
+	var length uint32
+	err := binary.Read(c, binary.LittleEndian, &length)
+	if err != nil {
+		return nil, err
+	}
+
+	// 读取数据
+	data := make([]byte, length)
+	if err = binary.Read(c, binary.LittleEndian, &data); err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func (c *ModelConnection) pubStateOrEvent(pubSet map[string]int, state message.StateOrEventMessage) {
 	if _, seen := pubSet[state.Name]; !seen {
 		return
@@ -298,9 +310,9 @@ func (c *ModelConnection) dealMsg(msgType string, payload []byte, fullData []byt
 	case "event":
 		return c.onEvent(payload, fullData)
 	case "call":
-		// TODO: 转发
+		return c.onCall(payload, fullData)
 	case "response":
-		// TODO: 转发
+		return c.onResp(payload, fullData)
 	case "query-meta":
 		return c.onQueryMeta()
 	case "meta-info":
@@ -359,6 +371,7 @@ func (c *ModelConnection) onState(payload []byte, fullData []byte) error {
 	}
 
 	c.stateBroadcast <- message.StateOrEventMessage{
+		Source:   c.MetaInfo.Name,
 		Name:     state.Name,
 		FullData: fullData,
 	}
@@ -373,7 +386,50 @@ func (c *ModelConnection) onEvent(payload []byte, fullData []byte) error {
 	}
 
 	c.eventBroadcast <- message.StateOrEventMessage{
+		Source:   c.MetaInfo.Name,
 		Name:     event.Name,
+		FullData: fullData,
+	}
+
+	return nil
+}
+
+func (c *ModelConnection) onCall(payload []byte, fullData []byte) error {
+	var call message.CallPayload
+	if err := jsoniter.Unmarshal(payload, &call); err != nil {
+		return err
+	}
+
+	modelName, err := splitModelName(call.Name)
+	if err != nil {
+		resp := make(map[string]interface{})
+		c.respWriteChan <- message.ResponseMessage{
+			Source:   "proxy",
+			UUID:     call.UUID,
+			FullData: message.NewResponseFullData(call.UUID, err.Error(), resp),
+		}
+		return nil
+	}
+
+	c.callChan <- message.CallMessage{
+		Source:   c.MetaInfo.Name,
+		Model:    modelName,
+		UUID:     call.UUID,
+		FullData: fullData,
+	}
+
+	return nil
+}
+
+func (c *ModelConnection) onResp(payload []byte, fullData []byte) error {
+	var resp message.ResponsePayload
+	if err := jsoniter.Unmarshal(payload, &resp); err != nil {
+		return err
+	}
+
+	c.respChan <- message.ResponseMessage{
+		Source:   c.MetaInfo.Name,
+		UUID:     resp.UUID,
 		FullData: fullData,
 	}
 
@@ -465,4 +521,21 @@ func (c *ModelConnection) sendSubEventMsg(req updateSubTableMsg) {
 	data, _ := jsoniter.Marshal(msg)
 
 	_, _ = c.Write(data)
+}
+
+func splitModelName(fullName string) (string, error) {
+	index := strings.LastIndex(fullName, "/")
+	if index == -1 {
+		return "", fmt.Errorf("%q missing '/'", fullName)
+	}
+
+	if strings.Trim(fullName[:index], " \t\n\r\f\v") == "" {
+		return "", fmt.Errorf("no model name in %q", fullName)
+	}
+
+	if strings.Trim(fullName[index+1:], " \t\n\n\f\v") == "" {
+		return "", fmt.Errorf("no method name in %q", fullName)
+	}
+
+	return fullName[:index], nil
 }
