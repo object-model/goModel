@@ -55,9 +55,9 @@ type CallPayload struct {
 }
 
 type ResponsePayload struct {
-	UUID  string                 `json:"uuid"`
-	Error string                 `json:"error"`
-	Resp  map[string]interface{} `json:"resp"`
+	UUID     string                 `json:"uuid"`
+	Error    string                 `json:"error"`
+	Response map[string]interface{} `json:"response"`
 }
 
 func NewResponseFullData(UUID string, Error string, Resp map[string]interface{}) []byte {
