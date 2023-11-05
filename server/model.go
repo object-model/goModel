@@ -12,18 +12,6 @@ import (
 	"time"
 )
 
-const (
-	setSub    = iota // 设置订阅
-	addSub           // 添加订阅
-	removeSub        // 删除订阅
-	clearSub         // 清空订阅
-)
-
-type updateSubTableMsg struct {
-	option int      // 更新动作类型
-	items  []string // 状态和事件列表
-}
-
 const queryMetaJSON = `
 {
 	"type": "query-meta",
