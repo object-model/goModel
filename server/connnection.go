@@ -59,6 +59,7 @@ type ModelConnection struct {
 	eventBroadcast     chan<- message.StateOrEventMessage // 事件广播通道
 	callChan           chan<- message.CallMessage         // 调用请求通道
 	respChan           chan<- message.ResponseMessage     // 响应结果通道
+	serverDone         <-chan struct{}                    // Server 完成退出信息
 	stateWriteChan     chan message.StateOrEventMessage   // 状态写入通道
 	eventWriteChan     chan message.StateOrEventMessage   // 事件写入通道
 	callWriteChan      chan message.CallMessage           // 调用写入通道
@@ -176,7 +177,14 @@ func (c *ModelConnection) queryMeta(timeout time.Duration) error {
 
 func (c *ModelConnection) reader() {
 	defer func() {
-		c.removeConnCh <- c
+		select {
+		case c.removeConnCh <- c: // 在Server未退出的情况下，通过Server退出writer
+		case <-c.serverDone:
+			// NOTE: 在Server完全退出的情况下，可自行退出writer
+			// NOTE: 否则会导致提前退出了writer的情况下，run还在向writer发送信号，
+			// NOTE: 从而导致run无法退出
+			c.quitWriter()
+		}
 	}()
 	for {
 		// 读取报文
@@ -370,10 +378,14 @@ func (c *ModelConnection) onState(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	c.stateBroadcast <- message.StateOrEventMessage{
+	select {
+	case c.stateBroadcast <- message.StateOrEventMessage{
 		Source:   c.MetaInfo.Name,
 		Name:     state.Name,
 		FullData: fullData,
+	}:
+	case <-c.serverDone:
+		return fmt.Errorf("proxy have quit")
 	}
 
 	return nil
@@ -385,10 +397,14 @@ func (c *ModelConnection) onEvent(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	c.eventBroadcast <- message.StateOrEventMessage{
+	select {
+	case c.eventBroadcast <- message.StateOrEventMessage{
 		Source:   c.MetaInfo.Name,
 		Name:     event.Name,
 		FullData: fullData,
+	}:
+	case <-c.serverDone:
+		return fmt.Errorf("proxy have quit")
 	}
 
 	return nil
@@ -411,11 +427,21 @@ func (c *ModelConnection) onCall(payload []byte, fullData []byte) error {
 		return nil
 	}
 
-	c.callChan <- message.CallMessage{
+	select {
+	case c.callChan <- message.CallMessage{
 		Source:   c.MetaInfo.Name,
 		Model:    modelName,
 		UUID:     call.UUID,
 		FullData: fullData,
+	}:
+	case <-c.serverDone:
+		resp := make(map[string]interface{})
+		c.respWriteChan <- message.ResponseMessage{
+			Source:   "proxy",
+			UUID:     call.UUID,
+			FullData: message.NewResponseFullData(call.UUID, "proxy have quit", resp),
+		}
+		return fmt.Errorf("proxy have quit")
 	}
 
 	return nil
@@ -427,10 +453,14 @@ func (c *ModelConnection) onResp(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	c.respChan <- message.ResponseMessage{
+	select {
+	case c.respChan <- message.ResponseMessage{
 		Source:   c.MetaInfo.Name,
 		UUID:     resp.UUID,
 		FullData: fullData,
+	}:
+	case <-c.serverDone:
+		return fmt.Errorf("proxy have quit")
 	}
 
 	return nil

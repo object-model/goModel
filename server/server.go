@@ -15,6 +15,7 @@ type Server struct {
 	callChan       chan message.CallMessage
 	respChan       chan message.ResponseMessage
 	quitCh         chan struct{}
+	done           chan struct{}
 }
 
 func New() *Server {
@@ -26,6 +27,7 @@ func New() *Server {
 		callChan:       make(chan message.CallMessage),
 		respChan:       make(chan message.ResponseMessage),
 		quitCh:         make(chan struct{}),
+		done:           make(chan struct{}),
 	}
 }
 
@@ -49,14 +51,15 @@ func (s *Server) ListenServe(addr string) error {
 }
 
 func (s *Server) run() {
+	defer close(s.done)
 	connections := make(map[string]*ModelConnection) // 所有连接
 	respWaiters := make(map[string]string)           // 等待响应的所有连接，uuid -> 链路的物模型名称
 	for {
 		select {
 		case <-s.quitCh:
 			for _, conn := range connections {
-				conn.quitWriter()
-				<-s.removeConnChan // NOTE: 必须等待，否则连接的reader会死等
+				// NOTE: 关闭连接，使在Read的reader主动退出
+				_ = conn.Close()
 			}
 			return
 		case state := <-s.stateChan:
@@ -127,7 +130,7 @@ func (s *Server) run() {
 			connections[conn.MetaInfo.Name] = conn
 		case conn := <-s.removeConnChan:
 			delete(connections, conn.MetaInfo.Name)
-			// NOTE: 在此处quitWriter, 不会导致由于连接writer协程体检退出而导致的死锁
+			// NOTE: 在此处quitWriter, 不会导致由于连接writer协程提前退出而导致的死锁
 			// NOTE: 因为只有调用了quitWriter之后，writer协程才会退出
 			conn.quitWriter()
 		}
@@ -148,6 +151,7 @@ func (s *Server) addModelConnection(conn net.Conn) {
 		eventBroadcast:     s.eventChan,
 		callChan:           s.callChan,
 		respChan:           s.respChan,
+		serverDone:         s.done,
 		stateWriteChan:     make(chan message.StateOrEventMessage, 256),
 		eventWriteChan:     make(chan message.StateOrEventMessage, 256),
 		callWriteChan:      make(chan message.CallMessage, 256),
@@ -163,12 +167,17 @@ func (s *Server) addModelConnection(conn net.Conn) {
 
 	// 发送查询元信息报文
 	if err := ans.queryMeta(time.Second * 5); err != nil {
-		ans.quitWriter()
+		// NOTE: 调用Close而不调用quitWriter
+		// NOTE: 这样保证链路协程的退出顺序始终为：
+		// NOTE: Close() -> reader退出 —> 向Server发出链路退出信号 ->
+		// NOTE: 关闭链路quit通道 -> writer退出
+		ans.Close()
+		return
 	}
 
 	// TODO: 添加元信息校验，元信息校验不通过则不添加, 并退出
 	// if ans.MetaInfo.Check() != nil {
-	// 	ans.quitWriter()
+	// 	ans.Close()
 	// }
 
 	// 添加链路
