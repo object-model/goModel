@@ -1,8 +1,16 @@
 package message
 
 import (
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"proxy/meta"
+)
+
+const (
+	SetSub    = iota // 设置订阅
+	AddSub           // 添加订阅
+	RemoveSub        // 删除订阅
+	ClearSub         // 清空订阅
 )
 
 type Message struct {
@@ -14,6 +22,12 @@ type StateOrEventMessage struct {
 	Source   string // 发送者的物模型名称
 	Name     string // 状态或者事件名称
 	FullData []byte // 全报文原始数据，是Message类型序列化的结果
+}
+
+type SubStateOrEventMessage struct {
+	Source string   // 发送者的物模型名称
+	Type   int      // 订阅类型
+	Items  []string // 状态或者事件列表
 }
 
 type CallMessage struct {
@@ -75,4 +89,72 @@ func NewResponseFullData(UUID string, Error string, Resp map[string]interface{})
 		panic(err)
 	}
 	return data
+}
+
+func NewPubStateMessage(Type int, items []string) ([]byte, error) {
+	var typeStr string
+	switch Type {
+	case SetSub:
+		typeStr = "set-subscribe-state"
+	case AddSub:
+		typeStr = "add-subscribe-state"
+	case RemoveSub:
+		typeStr = "remove-subscribe-state"
+	case ClearSub:
+		typeStr = "clear-subscribe-state"
+	default:
+		return nil, fmt.Errorf("invalid Type")
+	}
+
+	msg := map[string]interface{}{
+		"type":    typeStr,
+		"payload": items,
+	}
+
+	return jsoniter.Marshal(msg)
+}
+
+func NewPubEventMessage(Type int, items []string) ([]byte, error) {
+	var typeStr string
+	switch Type {
+	case SetSub:
+		typeStr = "set-subscribe-event"
+	case AddSub:
+		typeStr = "add-subscribe-event"
+	case RemoveSub:
+		typeStr = "remove-subscribe-event"
+	case ClearSub:
+		typeStr = "clear-subscribe-event"
+	default:
+		return nil, fmt.Errorf("invalid Type")
+	}
+
+	msg := map[string]interface{}{
+		"type":    typeStr,
+		"payload": items,
+	}
+
+	return jsoniter.Marshal(msg)
+}
+
+func UpdatePubTable(req SubStateOrEventMessage, pubSet map[string]struct{}) map[string]struct{} {
+	switch req.Type {
+	case SetSub:
+		pubSet = make(map[string]struct{})
+		for _, sub := range req.Items {
+			pubSet[sub] = struct{}{}
+		}
+	case AddSub:
+		for _, sub := range req.Items {
+			pubSet[sub] = struct{}{}
+		}
+	case RemoveSub:
+		for _, sub := range req.Items {
+			delete(pubSet, sub)
+		}
+	case ClearSub:
+		pubSet = make(map[string]struct{})
+	}
+
+	return pubSet
 }
