@@ -133,6 +133,11 @@ func (s *Server) run() {
 				connections[subEventReq.Source] = conn
 			}
 		case m := <-s.addConnChan:
+			// 模型名称重复，直接关闭连接
+			if _, repeat := connections[m.MetaInfo.Name]; repeat {
+				_ = m.Close()
+				continue
+			}
 			// 订阅所有状态
 			data, _ := message.NewPubStateMessage(message.SetSub, m.MetaInfo.AllStates())
 			m.writeChan <- data
@@ -151,7 +156,7 @@ func (s *Server) run() {
 
 			// 添加链路, 并通知已添加
 			connections[m.MetaInfo.Name] = conn
-			close(m.added)
+			m.setAdded()
 		case m := <-s.removeConnChan:
 			if conn, seen := connections[m.MetaInfo.Name]; seen {
 				// 通知所有等待本连接响应报文的调用请求 可以不用等了

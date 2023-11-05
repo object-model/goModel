@@ -52,6 +52,7 @@ type model struct {
 	onGetMetaOnce  sync.Once                             // 保证只响应一次元信息结果报文
 	quitReaderOnce sync.Once                             // 保证 readerQuit 只关闭一次
 	quitWriterOnce sync.Once                             // 保证 writerQuit 只关闭一次
+	addedOnce      sync.Once                             // 保证 added 只关闭一次
 	MetaInfo       message.MetaMessage                   // 元信息
 }
 
@@ -79,6 +80,12 @@ func (m *model) Write(data []byte) (int, error) {
 func (m *model) quitWriter() {
 	m.quitWriterOnce.Do(func() {
 		close(m.writerQuit)
+	})
+}
+
+func (m *model) setAdded() {
+	m.addedOnce.Do(func() {
+		close(m.added)
 	})
 }
 
@@ -209,28 +216,37 @@ func (m *model) onSubState(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	// NOTE: 必须开启新协程
-	// NOTE: 否则会导致死锁一段时间后, 连接关闭
-	go func() {
-		// 等待 Server 完全添加了自己
-		// 或者 reader 主动退出
-		select {
-		case <-m.added:
-		case <-m.readerQuit:
-			return
-		}
+	select {
+	case <-m.added:
+		return m.pushSubStateReq(option, states)
+	default:
+		// NOTE: 必须开启新协程
+		// NOTE: 否则会导致死锁一段时间后, 连接关闭
+		go func() {
+			// 等待 Server 完全添加了自己
+			// 或者 reader 主动退出
+			select {
+			case <-m.added:
+			case <-m.readerQuit:
+				return
+			}
+			_ = m.pushSubEventReq(option, states)
+		}()
+	}
 
-		select {
-		case m.subStateChan <- message.SubStateOrEventMessage{
-			Source: m.MetaInfo.Name,
-			Type:   option,
-			Items:  states,
-		}:
-		case <-m.serverDone:
-			return
-		}
-	}()
+	return nil
+}
 
+func (m *model) pushSubStateReq(option int, states []string) error {
+	select {
+	case m.subStateChan <- message.SubStateOrEventMessage{
+		Source: m.MetaInfo.Name,
+		Type:   option,
+		Items:  states,
+	}:
+	case <-m.serverDone:
+		return fmt.Errorf("proxy have exit")
+	}
 	return nil
 }
 
@@ -253,28 +269,37 @@ func (m *model) onSubEvent(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	// NOTE: 必须开启新协程
-	// NOTE: 否则会导致死锁一段时间后, 连接关闭
-	go func() {
-		// 等待 Server 完全添加了自己
-		// 或者 reader 主动退出
-		select {
-		case <-m.added:
-		case <-m.readerQuit:
-			return
-		}
+	select {
+	case <-m.added:
+		return m.pushSubEventReq(option, events)
+	default:
+		// NOTE: 必须开启新协程
+		// NOTE: 否则会导致死锁一段时间后, 连接关闭
+		go func() {
+			// 等待 Server 完全添加了自己
+			// 或者 reader 主动退出
+			select {
+			case <-m.added:
+			case <-m.readerQuit:
+				return
+			}
+			_ = m.pushSubEventReq(option, events)
+		}()
+	}
 
-		select {
-		case m.subEventChan <- message.SubStateOrEventMessage{
-			Source: m.MetaInfo.Name,
-			Type:   option,
-			Items:  events,
-		}:
-		case <-m.serverDone:
-			return
-		}
-	}()
+	return nil
+}
 
+func (m *model) pushSubEventReq(option int, events []string) error {
+	select {
+	case m.subEventChan <- message.SubStateOrEventMessage{
+		Source: m.MetaInfo.Name,
+		Type:   option,
+		Items:  events,
+	}:
+	case <-m.serverDone:
+		return fmt.Errorf("proxy have exit")
+	}
 	return nil
 }
 
@@ -285,15 +310,34 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 	}
 
 	select {
+	case <-m.added:
+		return m.pushState(state.Name, fullData)
+	default:
+		go func() {
+			// 等待 Server 完全添加了自己
+			// 或者 reader 主动退出
+			select {
+			case <-m.added:
+			case <-m.readerQuit:
+				return
+			}
+			_ = m.pushState(state.Name, fullData)
+		}()
+	}
+
+	return nil
+}
+
+func (m *model) pushState(name string, fullData []byte) error {
+	select {
 	case m.stateBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
-		Name:     state.Name,
+		Name:     name,
 		FullData: fullData,
 	}:
 	case <-m.serverDone:
 		return fmt.Errorf("proxy have quit")
 	}
-
 	return nil
 }
 
@@ -304,15 +348,34 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 	}
 
 	select {
+	case <-m.added:
+		return m.pushEvent(event.Name, fullData)
+	default:
+		go func() {
+			// 等待 Server 完全添加了自己
+			// 或者 reader 主动退出
+			select {
+			case <-m.added:
+			case <-m.readerQuit:
+				return
+			}
+			_ = m.pushEvent(event.Name, fullData)
+		}()
+	}
+
+	return nil
+}
+
+func (m *model) pushEvent(name string, fullData []byte) error {
+	select {
 	case m.eventBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
-		Name:     event.Name,
+		Name:     name,
 		FullData: fullData,
 	}:
 	case <-m.serverDone:
 		return fmt.Errorf("proxy have quit")
 	}
-
 	return nil
 }
 
@@ -329,31 +392,40 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		return nil
 	}
 
-	// NOTE: 必须开启新协程
-	// NOTE: 否则会导致死锁一段时间后, 连接关闭
-	go func() {
-		// 等待 Server 完全添加了自己之后，推送调用请求
-		// 或者 reader 主动退出
-		select {
-		case <-m.added:
-		case <-m.readerQuit:
-			return
-		}
+	select {
+	case <-m.added:
+		return m.pushCallReq(modelName, call, fullData)
+	default:
+		// NOTE: 必须开启新协程
+		// NOTE: 否则会导致死锁一段时间后, 连接关闭
+		go func() {
+			// 等待 Server 完全添加了自己之后，推送调用请求
+			// 或者 reader 主动退出
+			select {
+			case <-m.added:
+			case <-m.readerQuit:
+				return
+			}
+			_ = m.pushCallReq(modelName, call, fullData)
+		}()
+	}
 
-		select {
-		case m.callChan <- message.CallMessage{
-			Source:   m.MetaInfo.Name,
-			Model:    modelName,
-			UUID:     call.UUID,
-			FullData: fullData,
-		}:
-		case <-m.serverDone:
-			resp := make(map[string]interface{})
-			m.writeChan <- message.NewResponseFullData(call.UUID, "proxy have quit", resp)
-			return
-		}
-	}()
+	return nil
+}
 
+func (m *model) pushCallReq(modelName string, call message.CallPayload, fullData []byte) error {
+	select {
+	case m.callChan <- message.CallMessage{
+		Source:   m.MetaInfo.Name,
+		Model:    modelName,
+		UUID:     call.UUID,
+		FullData: fullData,
+	}:
+	case <-m.serverDone:
+		resp := make(map[string]interface{})
+		m.writeChan <- message.NewResponseFullData(call.UUID, "proxy have quit", resp)
+		return fmt.Errorf("proxy have exit")
+	}
 	return nil
 }
 
