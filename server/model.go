@@ -371,7 +371,7 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	modelName, err := splitModelName(call.Name)
+	modelName, methodName, err := splitModelName(call.Name)
 	if err != nil {
 		resp := make(map[string]interface{})
 		m.writeChan <- message.NewResponseFullData(call.UUID, err.Error(), resp)
@@ -380,7 +380,7 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 
 	select {
 	case <-m.added:
-		return m.pushCallReq(modelName, call, fullData)
+		return m.pushCallReq(modelName, methodName, call, fullData)
 	default:
 		// NOTE: 必须开启新协程
 		// NOTE: 否则会导致死锁一段时间后, 连接关闭
@@ -392,19 +392,21 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 			case <-m.readerQuit:
 				return
 			}
-			_ = m.pushCallReq(modelName, call, fullData)
+			_ = m.pushCallReq(modelName, methodName, call, fullData)
 		}()
 	}
 
 	return nil
 }
 
-func (m *model) pushCallReq(modelName string, call message.CallPayload, fullData []byte) error {
+func (m *model) pushCallReq(modelName string, methodName string, call message.CallPayload, fullData []byte) error {
 	select {
 	case m.callChan <- message.CallMessage{
 		Source:   m.MetaInfo.Name,
 		Model:    modelName,
+		Method:   methodName,
 		UUID:     call.UUID,
+		Args:     call.Args,
 		FullData: fullData,
 	}:
 	case <-m.serverDone:
@@ -456,19 +458,19 @@ func (m *model) onMetaInfo(payload []byte, fullData []byte) error {
 	return nil
 }
 
-func splitModelName(fullName string) (string, error) {
+func splitModelName(fullName string) (string, string, error) {
 	index := strings.LastIndex(fullName, "/")
 	if index == -1 {
-		return "", fmt.Errorf("%q missing '/'", fullName)
+		return "", "", fmt.Errorf("%q missing '/'", fullName)
 	}
 
 	if strings.Trim(fullName[:index], " \t\n\r\f\v") == "" {
-		return "", fmt.Errorf("no model name in %q", fullName)
+		return "", "", fmt.Errorf("no model name in %q", fullName)
 	}
 
 	if strings.Trim(fullName[index+1:], " \t\n\n\f\v") == "" {
-		return "", fmt.Errorf("no method name in %q", fullName)
+		return "", "", fmt.Errorf("no method name in %q", fullName)
 	}
 
-	return fullName[:index], nil
+	return fullName[:index], fullName[index+1:], nil
 }

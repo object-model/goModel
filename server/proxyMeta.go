@@ -17,6 +17,11 @@ const proxyMetaJSON = `
                         "name": "modelName",
                         "description": "上线的物模型名称",
                         "type": "string"
+                    },
+                    {
+                        "name": "addr",
+                        "description": "IP地址:端口号",
+                        "type": "string"
                     }
 				]
 			},
@@ -29,22 +34,60 @@ const proxyMetaJSON = `
                         "name": "modelName",
                         "description": "下线的物模型名称",
                         "type": "string"
+                    },
+                    {
+                        "name": "addr",
+                        "description": "IP地址:端口号",
+                        "type": "string"
                     }
                 ]
             }
 		],
 		"method": [
             {
-                "name": "GetAllModelName",
-                "description": "获取本代理下当前在线的物模型名称列表",
+                "name": "GetAllModel",
+                "description": "获取本代理下当前在线的物模型名称和地址列表",
                 "args": [],
                 "response": [
                     {
                         "name": "modelList",
-                        "description": "在线的物模型名称列表",
+                        "description": "在线的物模型名称+地址列表",
                         "type": "slice",
                         "element": {
-                            "type": "string"
+                            "type": "struct",
+                            "fields": [
+                                {
+                                    "name": "modelName",
+                                    "description": "物模型名称",
+                                    "type": "string"
+                                },
+                                {
+                                    "name": "addr",
+                                    "description": "IP地址:端口号",
+                                    "type": "string"
+                                },
+                                {
+                                    "name": "subStates",
+                                    "description": "状态订阅列表",
+                                    "type": "slice",
+                                    "element": {
+                                        "type": "string"
+                                    }
+                                },
+                                {
+                                    "name": "subEvents",
+                                    "description": "事件订阅列表",
+                                    "type": "slice",
+                                    "element": {
+                                        "type": "string"
+                                    }
+                                },
+                                {
+                                    "name": "meta",
+                                    "description": "模型元信息",
+                                    "type": "meta"
+                                }
+                            ]
                         }
                     }
                 ]

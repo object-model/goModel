@@ -31,10 +31,12 @@ type SubStateOrEventMessage struct {
 }
 
 type CallMessage struct {
-	Source   string // 调用者的模型名
-	Model    string // 调用目标的模型名
-	UUID     string // 调用UUID
-	FullData []byte // 全报文原始数据，是Message类型序列化的结果
+	Source   string                         // 调用者的模型名
+	Model    string                         // 调用目标的模型名
+	Method   string                         // 调用目标的方法名
+	UUID     string                         // 调用UUID
+	Args     map[string]jsoniter.RawMessage // 调用参数
+	FullData []byte                         // 全报文原始数据，是Message类型序列化的结果
 }
 
 type ResponseMessage struct {
@@ -58,14 +60,14 @@ type StatePayload struct {
 }
 
 type EventPayload struct {
-	Name string                 `json:"name"`
-	Args map[string]interface{} `json:"args"`
+	Name string                         `json:"name"`
+	Args map[string]jsoniter.RawMessage `json:"args"`
 }
 
 type CallPayload struct {
-	Name string                 `json:"name"`
-	UUID string                 `json:"uuid"`
-	Args map[string]interface{} `json:"args"`
+	Name string                         `json:"name"`
+	UUID string                         `json:"uuid"`
+	Args map[string]jsoniter.RawMessage `json:"args"`
 }
 
 type ResponsePayload struct {
@@ -74,7 +76,9 @@ type ResponsePayload struct {
 	Response map[string]interface{} `json:"response"`
 }
 
-func NewResponseFullData(UUID string, Error string, Resp map[string]interface{}) []byte {
+type Resp map[string]interface{}
+
+func NewResponseFullData(UUID string, Error string, Resp Resp) []byte {
 	msg := map[string]interface{}{
 		"type": "response",
 		"payload": ResponsePayload{
