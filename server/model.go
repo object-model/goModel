@@ -25,7 +25,6 @@ const proxyMetaJSON = `
 	"payload": {
 		"name": "proxy",
 		"description": "model proxy service",
-		"version": "1.0.0",
 		"state": [],
 		"event": [],
 		"method": []
