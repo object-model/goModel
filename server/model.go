@@ -19,19 +19,6 @@ const queryMetaJSON = `
 }
 `
 
-const proxyMetaJSON = `
-{
-	"type": "meta-info",
-	"payload": {
-		"name": "proxy",
-		"description": "model proxy service",
-		"state": [],
-		"event": [],
-		"method": []
-	}
-}
-`
-
 type model struct {
 	net.Conn                                             // 原始连接
 	readerQuit     chan struct{}                         // 退出 reader 的信号
