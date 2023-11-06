@@ -230,7 +230,7 @@ func (m *model) onSubState(Type string, payload []byte) error {
 			case <-m.readerQuit:
 				return
 			}
-			_ = m.pushSubEventReq(option, states)
+			_ = m.pushSubStateReq(option, states)
 		}()
 	}
 
