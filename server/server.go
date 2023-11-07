@@ -327,11 +327,11 @@ func (s *Server) addModelConnection(conn net.Conn) {
 		return
 	}
 
-	// TODO: 添加元信息校验，元信息校验不通过则不添加, 并退出
-	// if ans.MetaInfo.Check() != nil {
-	//    ans.Close()
-	//    return
-	// }
+	// 元信息校验不通过则不添加, 并退出
+	if ans.MetaInfo.Check() != nil {
+		_ = ans.Close()
+		return
+	}
 
 	// 添加链路
 	s.addConnChan <- ans
