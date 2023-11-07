@@ -14,8 +14,8 @@ const (
 )
 
 type Message struct {
-	Type    string              `json:"type"`
-	Payload jsoniter.RawMessage `json:"payload"`
+	Type    string              `json:"type"`    // 报文类型
+	Payload jsoniter.RawMessage `json:"payload"` // 报文内容
 }
 
 type StateOrEventMessage struct {
@@ -55,25 +55,25 @@ type SubStatePayload []string
 type SubEventPayload []string
 
 type StatePayload struct {
-	Name string      `json:"name"`
-	Data interface{} `json:"data"`
+	Name string      `json:"name"` // 状态全名: 模型名/状态名
+	Data interface{} `json:"data"` // 状态数据
 }
 
 type EventPayload struct {
-	Name string                         `json:"name"`
-	Args map[string]jsoniter.RawMessage `json:"args"`
+	Name string                 `json:"name"` // 事件全名: 模型名/事件名
+	Args map[string]interface{} `json:"args"` // 事件参数
 }
 
 type CallPayload struct {
-	Name string                         `json:"name"`
-	UUID string                         `json:"uuid"`
-	Args map[string]jsoniter.RawMessage `json:"args"`
+	Name string                         `json:"name"` // 调用的全方法名: 模型名/方法名
+	UUID string                         `json:"uuid"` // 调用的UUID
+	Args map[string]jsoniter.RawMessage `json:"args"` // 调用的参数
 }
 
 type ResponsePayload struct {
-	UUID     string                 `json:"uuid"`
-	Error    string                 `json:"error"`
-	Response map[string]interface{} `json:"response"`
+	UUID     string                 `json:"uuid"`     // 响应的UUID
+	Error    string                 `json:"error"`    // 错误字符串
+	Response map[string]interface{} `json:"response"` // 响应结果
 }
 
 type Resp map[string]interface{}

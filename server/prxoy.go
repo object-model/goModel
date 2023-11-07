@@ -40,7 +40,6 @@ type querySubReq struct {
 }
 
 func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
-
 	resp := message.Resp{}
 	err := ""
 	switch call.Method {
@@ -147,4 +146,42 @@ func (s *Server) GetSubList(Args map[string]jsoniter.RawMessage, queryChan chan<
 		"subList": res.SubList,
 		"got":     res.Got,
 	}, ""
+}
+
+func (s *Server) PushOnlineOrOfflineEvent(modelName string, addr string, online bool) {
+	EventName := "proxy/offline"
+	if online {
+		EventName = "proxy/online"
+	}
+
+	args := map[string]interface{}{
+		"modelName": modelName,
+		"addr":      addr,
+	}
+
+	eventPayload := message.EventPayload{
+		Name: EventName,
+		Args: args,
+	}
+
+	eventPaloadData, err := jsoniter.Marshal(eventPayload)
+	if err != nil {
+		return
+	}
+
+	msg := message.Message{
+		Type:    "event",
+		Payload: eventPaloadData,
+	}
+
+	fullData, err := jsoniter.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	s.eventChan <- message.StateOrEventMessage{
+		Source:   "proxy",
+		Name:     EventName,
+		FullData: fullData,
+	}
 }

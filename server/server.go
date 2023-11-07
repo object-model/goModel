@@ -74,18 +74,23 @@ func (s *Server) run() {
 	respWaiters := make(map[string]string)
 	for {
 		select {
+		// 状态
 		case state := <-s.stateChan:
 			for _, conn := range connections {
 				if _, want := conn.pubStates[state.Name]; want {
 					conn.writeChan <- state.FullData
 				}
 			}
+
+		// 事件
 		case event := <-s.eventChan:
 			for _, conn := range connections {
 				if _, want := conn.pubEvents[event.Name]; want {
 					conn.writeChan <- event.FullData
 				}
 			}
+
+		// 调用
 		case call := <-s.callChan:
 			if call.Model == "proxy" {
 				// 调用代理的方法
@@ -163,6 +168,9 @@ func (s *Server) run() {
 				pubEvents: map[string]struct{}{},
 			}
 
+			// 推送上线事件
+			go s.PushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), true)
+
 			// 添加链路, 并通知已添加
 			connections[m.MetaInfo.Name] = conn
 			m.setAdded()
@@ -186,6 +194,9 @@ func (s *Server) run() {
 
 				// 删除链路
 				delete(connections, m.MetaInfo.Name)
+
+				// 推送下线事件
+				go s.PushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), false)
 			}
 
 			// NOTE: 在此处quitWriter, 不会导致由于连接writer协程提前退出而导致的死锁
@@ -214,6 +225,7 @@ func (s *Server) run() {
 			}
 			resChan <- items
 
+		// 查询指定物模型
 		case queryModel := <-s.queryModel:
 			info := modelItem{
 				ModelName: "none",
@@ -240,6 +252,7 @@ func (s *Server) run() {
 				ModelInfo: info,
 				Got:       seen,
 			}
+
 		// 查询物模型是否在线
 		case isOnlineReq := <-s.queryOnline:
 			_, seen := connections[isOnlineReq.ModelName]
