@@ -62,13 +62,7 @@ func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
 
 func (s *Server) GetAllModel() (resp message.Resp, err string) {
 	resChan := make(chan []modelItem, 1)
-	select {
-	case s.queryAllModel <- resChan:
-	case <-s.done:
-		resp = message.Resp{}
-		err = "proxy have quit"
-		return
-	}
+	s.queryAllModel <- resChan
 	items := <-resChan
 	resp = message.Resp{
 		"modelList": items,
@@ -90,12 +84,7 @@ func (s *Server) ModelIsOnline(Args map[string]jsoniter.RawMessage) (message.Res
 		ModelName: modelName,
 		ResChan:   make(chan bool, 1),
 	}
-
-	select {
-	case s.queryOnlineReq <- req:
-	case <-s.done:
-		return message.Resp{}, "proxy have quit"
-	}
+	s.queryOnlineReq <- req
 
 	return message.Resp{
 		"isOnline": <-req.ResChan,
@@ -117,11 +106,7 @@ func (s *Server) GetSubState(Args map[string]jsoniter.RawMessage) (message.Resp,
 		ResChan:   make(chan querySubRes, 1),
 	}
 
-	select {
-	case s.querySubStateReq <- req:
-	case <-s.done:
-		return message.Resp{}, "proxy have quit"
-	}
+	s.querySubStateReq <- req
 
 	res := <-req.ResChan
 

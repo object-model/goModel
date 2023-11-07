@@ -101,6 +101,8 @@ func (s *Server) run() {
 				conn.inCalls[call.UUID] = struct{}{}
 				connections[call.Source].outCalls[call.UUID] = struct{}{}
 			}
+
+		// 响应报文
 		case resp := <-s.respChan:
 			// 不是在编的物模型连接发送的调用请求不响应
 			if srcConn, seen := connections[resp.Source]; !seen {
@@ -119,16 +121,22 @@ func (s *Server) run() {
 			}
 			// 删除调用记录
 			delete(respWaiters, resp.UUID)
+
+		// 更新状态发布
 		case subStateReq := <-s.subStateChan:
 			if conn, seen := connections[subStateReq.Source]; seen {
 				conn.pubStates = message.UpdatePubTable(subStateReq, conn.pubStates)
 				connections[subStateReq.Source] = conn
 			}
+
+		// 更新状态发布
 		case subEventReq := <-s.subEventChan:
 			if conn, seen := connections[subEventReq.Source]; seen {
 				conn.pubEvents = message.UpdatePubTable(subEventReq, conn.pubEvents)
 				connections[subEventReq.Source] = conn
 			}
+
+		// 添加链路
 		case m := <-s.addConnChan:
 			// 模型名称重复，直接关闭连接
 			if _, repeat := connections[m.MetaInfo.Name]; repeat {
@@ -154,6 +162,8 @@ func (s *Server) run() {
 			// 添加链路, 并通知已添加
 			connections[m.MetaInfo.Name] = conn
 			m.setAdded()
+
+		// 删除链路
 		case m := <-s.removeConnChan:
 			if conn, seen := connections[m.MetaInfo.Name]; seen {
 				// 通知所有等待本连接响应报文的调用请求 可以不用等了
