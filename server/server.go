@@ -19,8 +19,6 @@ type Server struct {
 	queryAllModel    chan chan []modelItem               // 查询在线模型通道
 	queryOnlineReq   chan queryOnlineReq                 // 查询模型是否在线通道
 	querySubStateReq chan querySubStateReq               // 查询状态订阅列表通道
-	quitCh           chan struct{}                       // 退出 run 信号
-	done             chan struct{}                       // run 完成退出信号
 }
 
 func New() *Server {
@@ -36,8 +34,6 @@ func New() *Server {
 		queryAllModel:    make(chan chan []modelItem),
 		queryOnlineReq:   make(chan queryOnlineReq),
 		querySubStateReq: make(chan querySubStateReq),
-		quitCh:           make(chan struct{}),
-		done:             make(chan struct{}),
 	}
 }
 
@@ -56,7 +52,6 @@ func (s *Server) ListenServe(addr string) error {
 	}
 
 	go s.run()
-	defer s.quit()
 
 	for {
 		rawConn, err := l.Accept()
@@ -69,19 +64,12 @@ func (s *Server) ListenServe(addr string) error {
 }
 
 func (s *Server) run() {
-	defer close(s.done)
 	// 所有连接
 	connections := make(map[string]connection)
 	// 等待响应的所有连接，uuid -> 发送调用请求的物模型名称
 	respWaiters := make(map[string]string)
 	for {
 		select {
-		case <-s.quitCh:
-			for _, conn := range connections {
-				// NOTE: 关闭连接，使在Read的reader主动退出
-				_ = conn.Close()
-			}
-			return
 		case state := <-s.stateChan:
 			for _, conn := range connections {
 				if _, want := conn.pubStates[state.Name]; want {
@@ -245,7 +233,6 @@ func (s *Server) addModelConnection(conn net.Conn) {
 		respChan:       s.respChan,
 		subStateChan:   s.subStateChan,
 		subEventChan:   s.subEventChan,
-		serverDone:     s.done,
 		writeChan:      make(chan []byte, 256),
 		writerQuit:     make(chan struct{}),
 		readerQuit:     make(chan struct{}),
@@ -274,8 +261,4 @@ func (s *Server) addModelConnection(conn net.Conn) {
 
 	// 添加链路
 	s.addConnChan <- ans
-}
-
-func (s *Server) quit() {
-	close(s.quitCh)
 }

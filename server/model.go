@@ -31,7 +31,6 @@ type model struct {
 	respChan       chan<- message.ResponseMessage        // 响应结果通道
 	subStateChan   chan<- message.SubStateOrEventMessage // 更新状态订阅写入通道
 	subEventChan   chan<- message.SubStateOrEventMessage // 更新事件订阅写入通道
-	serverDone     <-chan struct{}                       // Server 完成退出信息
 	writeChan      chan []byte                           // 数据写入通道
 	metaGotChan    chan struct{}                         // 收到元信息消息通道
 	queryOnce      sync.Once                             // 保证只查询一次元信息
@@ -92,14 +91,7 @@ func (m *model) queryMeta(timeout time.Duration) error {
 
 func (m *model) reader() {
 	defer func() {
-		select {
-		case m.removeConnCh <- m: // 在Server未退出的情况下，通过Server退出writer
-		case <-m.serverDone:
-			// NOTE: 在Server完全退出的情况下，可自行退出writer
-			// NOTE: 否则会导致提前退出了writer的情况下，run还在向writer发送信号，
-			// NOTE: 从而导致run无法退出
-			m.quitWriter()
-		}
+		m.removeConnCh <- m // 通过Server退出writer
 	}()
 	for {
 		// 读取报文
@@ -224,14 +216,10 @@ func (m *model) onSubState(Type string, payload []byte) error {
 }
 
 func (m *model) pushSubStateReq(option int, states []string) error {
-	select {
-	case m.subStateChan <- message.SubStateOrEventMessage{
+	m.subStateChan <- message.SubStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
 		Items:  states,
-	}:
-	case <-m.serverDone:
-		return fmt.Errorf("proxy have exit")
 	}
 	return nil
 }
@@ -277,14 +265,10 @@ func (m *model) onSubEvent(Type string, payload []byte) error {
 }
 
 func (m *model) pushSubEventReq(option int, events []string) error {
-	select {
-	case m.subEventChan <- message.SubStateOrEventMessage{
+	m.subEventChan <- message.SubStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
 		Items:  events,
-	}:
-	case <-m.serverDone:
-		return fmt.Errorf("proxy have exit")
 	}
 	return nil
 }
@@ -315,14 +299,10 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 }
 
 func (m *model) pushState(name string, fullData []byte) error {
-	select {
-	case m.stateBroadcast <- message.StateOrEventMessage{
+	m.stateBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
 		Name:     name,
 		FullData: fullData,
-	}:
-	case <-m.serverDone:
-		return fmt.Errorf("proxy have quit")
 	}
 	return nil
 }
@@ -353,14 +333,10 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 }
 
 func (m *model) pushEvent(name string, fullData []byte) error {
-	select {
-	case m.eventBroadcast <- message.StateOrEventMessage{
+	m.eventBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
 		Name:     name,
 		FullData: fullData,
-	}:
-	case <-m.serverDone:
-		return fmt.Errorf("proxy have quit")
 	}
 	return nil
 }
@@ -400,19 +376,13 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 }
 
 func (m *model) pushCallReq(modelName string, methodName string, call message.CallPayload, fullData []byte) error {
-	select {
-	case m.callChan <- message.CallMessage{
+	m.callChan <- message.CallMessage{
 		Source:   m.MetaInfo.Name,
 		Model:    modelName,
 		Method:   methodName,
 		UUID:     call.UUID,
 		Args:     call.Args,
 		FullData: fullData,
-	}:
-	case <-m.serverDone:
-		resp := make(map[string]interface{})
-		m.writeChan <- message.NewResponseFullData(call.UUID, "proxy have quit", resp)
-		return fmt.Errorf("proxy have exit")
 	}
 	return nil
 }
@@ -423,14 +393,10 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	select {
-	case m.respChan <- message.ResponseMessage{
+	m.respChan <- message.ResponseMessage{
 		Source:   m.MetaInfo.Name,
 		UUID:     resp.UUID,
 		FullData: fullData,
-	}:
-	case <-m.serverDone:
-		return fmt.Errorf("proxy have quit")
 	}
 
 	return nil
