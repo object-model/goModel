@@ -46,12 +46,12 @@ const proxyMetaJSON = `
 		"method": [
             {
                 "name": "GetAllModel",
-                "description": "获取本代理下当前在线的物模型名称和地址列表",
+                "description": "获取本代理下当前在线的所有物模型信息",
                 "args": [],
                 "response": [
                     {
                         "name": "modelList",
-                        "description": "在线的物模型名称+地址列表",
+                        "description": "在线的物模型信息列表",
                         "type": "slice",
                         "element": {
                             "type": "struct",
@@ -83,7 +83,7 @@ const proxyMetaJSON = `
                                     }
                                 },
                                 {
-                                    "name": "meta",
+                                    "name": "metaInfo",
                                     "description": "模型元信息",
                                     "type": "meta"
                                 }
@@ -91,6 +91,66 @@ const proxyMetaJSON = `
                         }
                     }
                 ]
+            },
+
+            {
+                "name": "GetModel",
+                "description": "获取指定名称的物模型的",
+                "args": [
+                    {
+                        "name": "modelName",
+                        "description": "物模型名称",
+                        "type": "string"
+                    }
+                ],
+
+                "response": [
+                    {
+                        "name": "modelInfo",
+                        "description": "物模型信息",
+                        "type": "struct",
+                        "fields": [
+                            {
+                                "name": "modelName",
+                                "description": "物模型名称",
+                                "type": "string"
+                            },
+                            {
+                                "name": "addr",
+                                "description": "IP地址:端口号",
+                                "type": "string"
+                            },
+                            {
+                                "name": "subStates",
+                                "description": "状态订阅列表",
+                                "type": "slice",
+                                "element": {
+                                    "type": "string"
+                                }
+                            },
+                            {
+                                "name": "subEvents",
+                                "description": "事件订阅列表",
+                                "type": "slice",
+                                "element": {
+                                    "type": "string"
+                                }
+                            },
+                            {
+                                "name": "metaInfo",
+                                "description": "模型元信息",
+                                "type": "meta"
+                            }
+                        ]
+                    },
+
+                    {
+                        "name": "got",
+                        "description": "是否获取成功，不在线返回false",
+                        "type": "bool"
+                    }
+                ]
+
             },
 
             {
@@ -165,50 +225,19 @@ const proxyMetaJSON = `
                         "type": "bool"
                     }
                 ]
-            },
-            
-            {
-                "name": "GetAllModelMeta",
-                "description": "获取本代理下当前在线的物模型元信息列表",
-                "args": [
-                ],
-                "response": [
-                    {
-                        "name": "metaList",
-                        "description": "在线的物模型元信息列表",
-                        "type": "slice",
-                        "element": {
-                            "type": "meta"
-                        }
-                    }
-                ]
-            },
-
-            {
-                "name": "GetModelMeta",
-                "description": "获取指定物模型的元信息",
-                "args": [
-                    {
-                        "name": "modelName",
-                        "description": "物模型名称",
-                        "type": "string"
-                    }
-                ],
-                "response": [
-                    {
-                        "name": "metaInfo",
-                        "description": "获取的物模型的元信息",
-                        "type": "meta"
-                    }, 
-
-                    {
-                        "name": "got",
-                        "description": "是否获取成功，不在线返回false",
-                        "type": "bool"
-                    }
-                ]
             }
         ]
 	}
+}
+`
+
+// noneMetaJSON 表示空物模型描述元信息
+const noneMetaJSON = `
+{
+	"name": "none",
+	"description": "空物模型",
+	"state": [],
+	"event": [],
+	"method": []
 }
 `

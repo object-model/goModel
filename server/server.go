@@ -8,32 +8,36 @@ import (
 )
 
 type Server struct {
-	addConnChan      chan *model                         // 添加链路通道
-	removeConnChan   chan *model                         // 删除链路通道
-	subStateChan     chan message.SubStateOrEventMessage // 订阅状态通道
-	subEventChan     chan message.SubStateOrEventMessage // 订阅事件通道
-	stateChan        chan message.StateOrEventMessage    // 状态报文通道
-	eventChan        chan message.StateOrEventMessage    // 事件报文通道
-	callChan         chan message.CallMessage            // 调用报文通道
-	respChan         chan message.ResponseMessage        // 响应报文通道
-	queryAllModel    chan chan []modelItem               // 查询在线模型通道
-	queryOnlineReq   chan queryOnlineReq                 // 查询模型是否在线通道
-	querySubStateReq chan querySubStateReq               // 查询状态订阅列表通道
+	addConnChan    chan *model                         // 添加链路通道
+	removeConnChan chan *model                         // 删除链路通道
+	subStateChan   chan message.SubStateOrEventMessage // 订阅状态通道
+	subEventChan   chan message.SubStateOrEventMessage // 订阅事件通道
+	stateChan      chan message.StateOrEventMessage    // 状态报文通道
+	eventChan      chan message.StateOrEventMessage    // 事件报文通道
+	callChan       chan message.CallMessage            // 调用报文通道
+	respChan       chan message.ResponseMessage        // 响应报文通道
+	queryAllModel  chan chan []modelItem               // 查询在线模型通道
+	queryModel     chan queryModelReq                  // 查询指定模型通道
+	queryOnline    chan queryOnlineReq                 // 查询模型是否在线通道
+	querySubState  chan querySubReq                    // 查询模型的状态订阅关系
+	querySubEvent  chan querySubReq                    // 查询模型的事件订阅关系
 }
 
 func New() *Server {
 	return &Server{
-		addConnChan:      make(chan *model),
-		removeConnChan:   make(chan *model),
-		subStateChan:     make(chan message.SubStateOrEventMessage),
-		subEventChan:     make(chan message.SubStateOrEventMessage),
-		stateChan:        make(chan message.StateOrEventMessage),
-		eventChan:        make(chan message.StateOrEventMessage),
-		callChan:         make(chan message.CallMessage),
-		respChan:         make(chan message.ResponseMessage),
-		queryAllModel:    make(chan chan []modelItem),
-		queryOnlineReq:   make(chan queryOnlineReq),
-		querySubStateReq: make(chan querySubStateReq),
+		addConnChan:    make(chan *model),
+		removeConnChan: make(chan *model),
+		subStateChan:   make(chan message.SubStateOrEventMessage),
+		subEventChan:   make(chan message.SubStateOrEventMessage),
+		stateChan:      make(chan message.StateOrEventMessage),
+		eventChan:      make(chan message.StateOrEventMessage),
+		callChan:       make(chan message.CallMessage),
+		respChan:       make(chan message.ResponseMessage),
+		queryAllModel:  make(chan chan []modelItem),
+		queryModel:     make(chan queryModelReq),
+		queryOnline:    make(chan queryOnlineReq),
+		querySubState:  make(chan querySubReq),
+		querySubEvent:  make(chan querySubReq),
 	}
 }
 
@@ -205,18 +209,44 @@ func (s *Server) run() {
 					Addr:      conn.model.RemoteAddr().String(),
 					SubStates: states,
 					SubEvents: events,
-					Meta:      conn.MetaInfo.FullData,
+					MetaInfo:  conn.MetaInfo.FullData,
 				})
 			}
 			resChan <- items
 
+		case queryModel := <-s.queryModel:
+			info := modelItem{
+				ModelName: "none",
+				Addr:      "",
+				SubStates: make([]string, 0),
+				SubEvents: make([]string, 0),
+				MetaInfo:  []byte(noneMetaJSON),
+			}
+			conn, seen := connections[queryModel.ModelName]
+			if seen {
+				info.ModelName = conn.MetaInfo.Name
+				info.SubStates = make([]string, 0, len(conn.pubStates))
+				for state := range conn.pubStates {
+					info.SubStates = append(info.SubStates, state)
+				}
+				info.SubEvents = make([]string, 0, len(conn.pubEvents))
+				for state := range conn.pubEvents {
+					info.SubEvents = append(info.SubEvents, state)
+				}
+				info.Addr = conn.RemoteAddr().String()
+				info.MetaInfo = conn.MetaInfo.FullData
+			}
+			queryModel.ResChan <- queryModelRes{
+				ModelInfo: info,
+				Got:       seen,
+			}
 		// 查询物模型是否在线
-		case isOnlineReq := <-s.queryOnlineReq:
+		case isOnlineReq := <-s.queryOnline:
 			_, seen := connections[isOnlineReq.ModelName]
 			isOnlineReq.ResChan <- seen
 
 		// 查询模型状态订阅关系
-		case querySubState := <-s.querySubStateReq:
+		case querySubState := <-s.querySubState:
 			subList := make([]string, 0)
 			conn, seen := connections[querySubState.ModelName]
 			if seen {
@@ -226,6 +256,21 @@ func (s *Server) run() {
 				}
 			}
 			querySubState.ResChan <- querySubRes{
+				SubList: subList,
+				Got:     seen,
+			}
+
+		// 查询模型状态订阅关系
+		case querySubEvent := <-s.querySubEvent:
+			subList := make([]string, 0)
+			conn, seen := connections[querySubEvent.ModelName]
+			if seen {
+				subList = make([]string, 0, len(conn.pubEvents))
+				for pub := range conn.pubEvents {
+					subList = append(subList, pub)
+				}
+			}
+			querySubEvent.ResChan <- querySubRes{
 				SubList: subList,
 				Got:     seen,
 			}

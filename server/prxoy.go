@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"proxy/message"
 )
@@ -10,7 +11,17 @@ type modelItem struct {
 	Addr      string              `json:"addr"`
 	SubStates []string            `json:"subStates"`
 	SubEvents []string            `json:"subEvents"`
-	Meta      jsoniter.RawMessage `json:"meta"`
+	MetaInfo  jsoniter.RawMessage `json:"metaInfo"`
+}
+
+type queryModelRes struct {
+	ModelInfo modelItem `json:"modelInfo"`
+	Got       bool      `json:"got"`
+}
+
+type queryModelReq struct {
+	ModelName string
+	ResChan   chan queryModelRes
 }
 
 type queryOnlineReq struct {
@@ -23,7 +34,7 @@ type querySubRes struct {
 	Got     bool     `json:"got"`
 }
 
-type querySubStateReq struct {
+type querySubReq struct {
 	ModelName string
 	ResChan   chan querySubRes
 }
@@ -35,18 +46,16 @@ func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
 	switch call.Method {
 	case "GetAllModel":
 		resp, err = s.GetAllModel()
+	case "GetModel":
+		resp, err = s.GetModel(call.Args)
 	case "ModelIsOnline":
 		resp, err = s.ModelIsOnline(call.Args)
 	case "GetSubState":
-
+		resp, err = s.GetSubList(call.Args, s.querySubState)
 	case "GetSubEvent":
-
-	case "GetAllModelMeta":
-
-	case "GetModelMeta":
-
+		resp, err = s.GetSubList(call.Args, s.querySubEvent)
 	default:
-
+		err = fmt.Sprintf("NO method %q in proxy", call.Method)
 	}
 
 	// 编码响应
@@ -70,6 +79,30 @@ func (s *Server) GetAllModel() (resp message.Resp, err string) {
 	return
 }
 
+func (s *Server) GetModel(Args map[string]jsoniter.RawMessage) (resp message.Resp, err string) {
+	var modelName string
+	data, seen := Args["modelName"]
+	if !seen {
+		return message.Resp{}, "missing field \"modelName\" in args"
+	}
+	if err := jsoniter.Unmarshal(data, &modelName); err != nil {
+		return message.Resp{}, err.Error()
+	}
+
+	req := queryModelReq{
+		ModelName: modelName,
+		ResChan:   make(chan queryModelRes, 1),
+	}
+
+	s.queryModel <- req
+	res := <-req.ResChan
+
+	return message.Resp{
+		"modelInfo": res.ModelInfo,
+		"got":       res.Got,
+	}, ""
+}
+
 func (s *Server) ModelIsOnline(Args map[string]jsoniter.RawMessage) (message.Resp, string) {
 	var modelName string
 	data, seen := Args["modelName"]
@@ -84,14 +117,14 @@ func (s *Server) ModelIsOnline(Args map[string]jsoniter.RawMessage) (message.Res
 		ModelName: modelName,
 		ResChan:   make(chan bool, 1),
 	}
-	s.queryOnlineReq <- req
+	s.queryOnline <- req
 
 	return message.Resp{
 		"isOnline": <-req.ResChan,
 	}, ""
 }
 
-func (s *Server) GetSubState(Args map[string]jsoniter.RawMessage) (message.Resp, string) {
+func (s *Server) GetSubList(Args map[string]jsoniter.RawMessage, queryChan chan<- querySubReq) (message.Resp, string) {
 	var modelName string
 	data, seen := Args["modelName"]
 	if !seen {
@@ -101,12 +134,12 @@ func (s *Server) GetSubState(Args map[string]jsoniter.RawMessage) (message.Resp,
 		return message.Resp{}, err.Error()
 	}
 
-	req := querySubStateReq{
+	req := querySubReq{
 		ModelName: modelName,
 		ResChan:   make(chan querySubRes, 1),
 	}
 
-	s.querySubStateReq <- req
+	queryChan <- req
 
 	res := <-req.ResChan
 
