@@ -10,7 +10,8 @@ import (
 
 const Version = "0.0.1"
 
-const Desc = "proxy is object model proxy server which can transmit model message and also provides methods and events itself."
+const Desc = "proxy is object model proxy server which can transmit model message " +
+	"and also provides methods and events itself."
 
 func main() {
 	var address string
@@ -35,5 +36,6 @@ func main() {
 
 	s := server.New()
 
+	fmt.Println("proxy listen at", address)
 	log.Fatalln(s.ListenServe(address))
 }
