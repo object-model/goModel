@@ -7,15 +7,15 @@ import (
 )
 
 var validType = map[string]struct{}{
-	"bool":   struct{}{},
-	"int":    struct{}{},
-	"uint":   struct{}{},
-	"float":  struct{}{},
-	"string": struct{}{},
-	"array":  struct{}{},
-	"slice":  struct{}{},
-	"struct": struct{}{},
-	"meta":   struct{}{},
+	"bool":   {},
+	"int":    {},
+	"uint":   {},
+	"float":  {},
+	"string": {},
+	"array":  {},
+	"slice":  {},
+	"struct": {},
+	"meta":   {},
 }
 
 type OptionInfo struct {
