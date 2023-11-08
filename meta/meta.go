@@ -500,7 +500,7 @@ func checkIntRange(rangeMeta RangeInfo) error {
 
 		// 在有max字段情况下, int类型的max字段必须是int类型
 		if rangeMeta.Max != nil {
-			if jsoniter.Unmarshal(rangeMeta.Min, &max) != nil {
+			if jsoniter.Unmarshal(rangeMeta.Max, &max) != nil {
 				return fmt.Errorf("range: max is NOT int")
 			}
 		}
@@ -588,7 +588,7 @@ func checkUintRange(rangeMeta RangeInfo) error {
 
 		// 在有max字段情况下, uint类型的max字段必须是uint类型
 		if rangeMeta.Max != nil {
-			if jsoniter.Unmarshal(rangeMeta.Min, &max) != nil {
+			if jsoniter.Unmarshal(rangeMeta.Max, &max) != nil {
 				return fmt.Errorf("range: max is NOT uint")
 			}
 		}
