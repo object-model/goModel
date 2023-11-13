@@ -41,6 +41,30 @@ const proxyMetaJSON = `
                         "type": "string"
                     }
                 ]
+            },
+
+            {
+                "name": "metaCheckError",
+                "description": "物模型元信息校验错误事件",
+                "args": [
+                    {
+                        "name": "error"
+                        "description": "校验错误提示信息",
+                        "type": "string"
+                    },
+
+                    {
+                        "name": "modelName",
+                        "description": "校验出错的物模型名称",
+                        "type": "string"
+                    },
+
+                    {
+                        "name": "addr",
+                        "description": "校验出错的物模型的IP地址:端口号",
+                        "type": "string"
+                    }
+                ]
             }
 		],
 		"method": [

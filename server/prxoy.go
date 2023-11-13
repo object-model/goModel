@@ -4,6 +4,7 @@ import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"proxy/message"
+	"time"
 )
 
 type modelItem struct {
@@ -166,7 +167,7 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 
 	eventPayloadData, err := jsoniter.Marshal(eventPayload)
 	if err != nil {
-		return
+		panic(err)
 	}
 
 	msg := message.Message{
@@ -176,7 +177,7 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 
 	fullData, err := jsoniter.Marshal(msg)
 	if err != nil {
-		return
+		panic(err)
 	}
 
 	s.eventChan <- message.StateOrEventMessage{
@@ -184,4 +185,51 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 		Name:     EventName,
 		FullData: fullData,
 	}
+}
+
+func newMetaCheckErrorEvent(modelName string, addr string, checkErr error) message.StateOrEventMessage {
+	args := map[string]interface{}{
+		"modelName": modelName,
+		"addr":      addr,
+		"error":     checkErr.Error(),
+	}
+
+	eventPayload := message.EventPayload{
+		Name: "metaCheckError",
+		Args: args,
+	}
+
+	eventPayloadData, err := jsoniter.Marshal(eventPayload)
+	if err != nil {
+		panic(err)
+	}
+
+	msg := message.Message{
+		Type:    "event",
+		Payload: eventPayloadData,
+	}
+
+	fullData, err := jsoniter.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+
+	return message.StateOrEventMessage{
+		Name:     "metaCheckError",
+		Source:   "proxy",
+		FullData: fullData,
+	}
+}
+
+func (s *Server) pushMetaCheckErrorEvent(err error, m *model) {
+	event := newMetaCheckErrorEvent(m.MetaInfo.Name, m.RemoteAddr().String(), err)
+
+	// 无论m是否订阅metaCheckError事件都主动推送
+	m.writeChan <- event.FullData
+
+	// 正常推送事件
+	s.eventChan <- event
+
+	// NOTE: 延时关闭连接，尽量确保状态event能发送
+	time.Sleep(time.Second)
 }

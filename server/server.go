@@ -348,7 +348,8 @@ func (s *Server) addModelConnection(conn ModelConn) {
 	}
 
 	// 元信息校验不通过则不添加, 并退出
-	if ans.MetaInfo.Check() != nil {
+	if err := ans.MetaInfo.Check(); err != nil {
+		s.pushMetaCheckErrorEvent(err, ans)
 		_ = ans.Close()
 		return
 	}
