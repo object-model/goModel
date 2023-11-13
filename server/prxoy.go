@@ -164,14 +164,14 @@ func (s *Server) PushOnlineOrOfflineEvent(modelName string, addr string, online 
 		Args: args,
 	}
 
-	eventPaloadData, err := jsoniter.Marshal(eventPayload)
+	eventPayloadData, err := jsoniter.Marshal(eventPayload)
 	if err != nil {
 		return
 	}
 
 	msg := message.Message{
 		Type:    "event",
-		Payload: eventPaloadData,
+		Payload: eventPayloadData,
 	}
 
 	fullData, err := jsoniter.Marshal(msg)
