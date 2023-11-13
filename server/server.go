@@ -2,10 +2,19 @@ package server
 
 import (
 	"fmt"
+	"github.com/gorilla/websocket"
 	"net"
+	"net/http"
 	"proxy/message"
 	"time"
 )
+
+var upgrader = websocket.Upgrader{
+	// 允许跨域访问
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
+}
 
 type Server struct {
 	addConnChan    chan *model                         // 添加链路通道
@@ -24,7 +33,7 @@ type Server struct {
 }
 
 func New() *Server {
-	return &Server{
+	s := &Server{
 		addConnChan:    make(chan *model),
 		removeConnChan: make(chan *model),
 		subStateChan:   make(chan message.SubStateOrEventMessage),
@@ -39,6 +48,8 @@ func New() *Server {
 		querySubState:  make(chan querySubReq),
 		querySubEvent:  make(chan querySubReq),
 	}
+	go s.run()
+	return s
 }
 
 type connection struct {
@@ -49,13 +60,11 @@ type connection struct {
 	pubEvents map[string]struct{} // 事件发布表, 用于记录哪些事件可以发送到链路上
 }
 
-func (s *Server) ListenServe(addr string) error {
+func (s *Server) ListenServeTCP(addr string) error {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
-
-	go s.run()
 
 	for {
 		rawConn, err := l.Accept()
@@ -63,8 +72,19 @@ func (s *Server) ListenServe(addr string) error {
 			return err
 		}
 
-		go s.addModelConnection(rawConn)
+		go s.addModelConnection(NewTcpConn(rawConn))
 	}
+}
+
+func (s *Server) ListenServerWebSocket(addr string) error {
+	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+		conn, err := upgrader.Upgrade(writer, request, nil)
+		if err != nil {
+			return
+		}
+		s.addModelConnection(NewWebSocketConn(conn))
+	})
+	return http.ListenAndServe(addr, nil)
 }
 
 func (s *Server) run() {
@@ -190,7 +210,7 @@ func (s *Server) onAddConn(connections map[string]connection, m *model) {
 	}
 
 	// 推送上线事件
-	go s.PushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), true)
+	go s.pushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), true)
 
 	// 添加链路, 并通知已添加
 	connections[m.MetaInfo.Name] = conn
@@ -218,7 +238,7 @@ func (s *Server) onRemoveConn(connections map[string]connection, m *model,
 		delete(connections, m.MetaInfo.Name)
 
 		// 推送下线事件
-		go s.PushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), false)
+		go s.pushOnlineOrOfflineEvent(m.MetaInfo.Name, m.RemoteAddr().String(), false)
 	}
 
 	// NOTE: 在此处quitWriter, 不会导致由于连接writer协程提前退出而导致的死锁
@@ -297,9 +317,9 @@ func onQuerySub(connections map[string]connection, querySubState querySubReq, is
 	}
 }
 
-func (s *Server) addModelConnection(conn net.Conn) {
+func (s *Server) addModelConnection(conn ModelConn) {
 	ans := &model{
-		Conn:           conn,
+		ModelConn:      conn,
 		removeConnCh:   s.removeConnChan,
 		stateBroadcast: s.stateChan,
 		eventBroadcast: s.eventChan,

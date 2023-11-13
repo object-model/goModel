@@ -4,6 +4,25 @@
 
 # 更新日志
 
+## 20231113
+
+**代理添加WebSocket接口的支持**：
+
+1. 按照物模型规范的开发的物模型可以通过WebSocket接口与代理建立连接，进行消息的转发
+
+2. 实现方法简而言之是定义接口`ModelConn`:
+
+   ```go
+   type ModelConn interface {
+   	Close() error
+   	RemoteAddr() net.Addr
+   	ReadMsg() ([]byte, error)
+   	WriteMsg(msg []byte) error
+   }
+   ```
+
+   这个接口用于实现如何发送和接收物模型的报文，而模型`model`通过依赖这个接口，实现对不同通信接口的兼容，建立连接时只需构造实现了该接口的对象，并传入`model`中即可
+
 ## 20231107
 
 删除Server的退出和完成退出信号，因为一旦Sever的ListenServe失败，整个程序直接退出，没有必要再停止run了

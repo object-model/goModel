@@ -1,7 +1,6 @@
 package server
 
 import (
-	"encoding/binary"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"net"
@@ -19,8 +18,19 @@ const queryMetaJSON = `
 }
 `
 
+type ModelConn interface {
+	Close() error
+	RemoteAddr() net.Addr
+
+	// ReadMsg 从物模型连接中读取完整的一包物模型报文并返回读取的报文和错误信息
+	ReadMsg() ([]byte, error)
+
+	// WriteMsg 将物模型报文msg通过连接发送到网络上
+	WriteMsg(msg []byte) error
+}
+
 type model struct {
-	net.Conn                                             // 原始连接
+	ModelConn                                            // 原始连接
 	readerQuit     chan struct{}                         // 退出 reader 的信号
 	writerQuit     chan struct{}                         // 退出 writer 的信号
 	added          chan struct{}                         // 连接已经加入 Server 信号
@@ -45,21 +55,7 @@ func (m *model) Close() error {
 	m.quitReaderOnce.Do(func() {
 		close(m.readerQuit)
 	})
-	return m.Conn.Close()
-}
-
-func (m *model) Write(data []byte) (int, error) {
-	if len(data) == 0 {
-		return 0, nil
-	}
-
-	length := uint32(len(data))
-	err := binary.Write(m.Conn, binary.LittleEndian, &length)
-	if err != nil {
-		return 0, err
-	}
-
-	return m.Conn.Write(data)
+	return m.ModelConn.Close()
 }
 
 func (m *model) quitWriter() {
@@ -95,7 +91,7 @@ func (m *model) reader() {
 	}()
 	for {
 		// 读取报文
-		data, err := m.readMsg()
+		data, err := m.ReadMsg()
 		if err != nil {
 			break
 		}
@@ -128,25 +124,9 @@ func (m *model) writer() {
 			return
 		// 发送数据
 		case data := <-m.writeChan:
-			_, _ = m.Write(data)
+			_ = m.WriteMsg(data)
 		}
 	}
-}
-
-func (m *model) readMsg() ([]byte, error) {
-	// 读取长度
-	var length uint32
-	err := binary.Read(m, binary.LittleEndian, &length)
-	if err != nil {
-		return nil, err
-	}
-
-	// 读取数据
-	data := make([]byte, length)
-	if err = binary.Read(m, binary.LittleEndian, &data); err != nil {
-		return nil, err
-	}
-	return data, nil
 }
 
 func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {

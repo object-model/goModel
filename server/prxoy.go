@@ -44,15 +44,15 @@ func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
 	err := ""
 	switch call.Method {
 	case "GetAllModel":
-		resp, err = s.GetAllModel()
+		resp, err = s.getAllModel()
 	case "GetModel":
-		resp, err = s.GetModel(call.Args)
+		resp, err = s.getModel(call.Args)
 	case "ModelIsOnline":
-		resp, err = s.ModelIsOnline(call.Args)
+		resp, err = s.modelIsOnline(call.Args)
 	case "GetSubState":
-		resp, err = s.GetSubList(call.Args, s.querySubState)
+		resp, err = s.getSubList(call.Args, s.querySubState)
 	case "GetSubEvent":
-		resp, err = s.GetSubList(call.Args, s.querySubEvent)
+		resp, err = s.getSubList(call.Args, s.querySubEvent)
 	default:
 		err = fmt.Sprintf("NO method %q in proxy", call.Method)
 	}
@@ -68,7 +68,7 @@ func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
 	}
 }
 
-func (s *Server) GetAllModel() (resp message.Resp, err string) {
+func (s *Server) getAllModel() (resp message.Resp, err string) {
 	resChan := make(chan []modelItem, 1)
 	s.queryAllModel <- resChan
 	items := <-resChan
@@ -78,7 +78,7 @@ func (s *Server) GetAllModel() (resp message.Resp, err string) {
 	return
 }
 
-func (s *Server) GetModel(Args map[string]jsoniter.RawMessage) (resp message.Resp, err string) {
+func (s *Server) getModel(Args map[string]jsoniter.RawMessage) (resp message.Resp, err string) {
 	var modelName string
 	data, seen := Args["modelName"]
 	if !seen {
@@ -102,7 +102,7 @@ func (s *Server) GetModel(Args map[string]jsoniter.RawMessage) (resp message.Res
 	}, ""
 }
 
-func (s *Server) ModelIsOnline(Args map[string]jsoniter.RawMessage) (message.Resp, string) {
+func (s *Server) modelIsOnline(Args map[string]jsoniter.RawMessage) (message.Resp, string) {
 	var modelName string
 	data, seen := Args["modelName"]
 	if !seen {
@@ -123,7 +123,7 @@ func (s *Server) ModelIsOnline(Args map[string]jsoniter.RawMessage) (message.Res
 	}, ""
 }
 
-func (s *Server) GetSubList(Args map[string]jsoniter.RawMessage, queryChan chan<- querySubReq) (message.Resp, string) {
+func (s *Server) getSubList(Args map[string]jsoniter.RawMessage, queryChan chan<- querySubReq) (message.Resp, string) {
 	var modelName string
 	data, seen := Args["modelName"]
 	if !seen {
@@ -148,7 +148,7 @@ func (s *Server) GetSubList(Args map[string]jsoniter.RawMessage, queryChan chan<
 	}, ""
 }
 
-func (s *Server) PushOnlineOrOfflineEvent(modelName string, addr string, online bool) {
+func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online bool) {
 	EventName := "proxy/offline"
 	if online {
 		EventName = "proxy/online"

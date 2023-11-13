@@ -14,9 +14,13 @@ const Desc = "proxy is object model proxy server which can transmit model messag
 	"and also provides methods and events itself."
 
 func main() {
+	var webSocket bool
+	var webSocketAddr string
 	var address string
 	var showVersion bool
-	flag.StringVar(&address, "addr", "0.0.0.0:8080", "proxy network address to listen")
+	flag.BoolVar(&webSocket, "ws", false, "whether or not to run websocket service")
+	flag.StringVar(&webSocketAddr, "wsAddr", "0.0.0.0:9090", "proxy websocket address")
+	flag.StringVar(&address, "addr", "0.0.0.0:8080", "proxy tcp address")
 	flag.BoolVar(&showVersion, "v", false, "show version of proxy")
 
 	flag.Usage = func() {
@@ -36,6 +40,14 @@ func main() {
 
 	s := server.New()
 
-	fmt.Println("proxy listen at", address)
-	log.Fatalln(s.ListenServe(address))
+	// 开启webSocket服务
+	if webSocket {
+		go func() {
+			fmt.Println("proxy listen websocket at", webSocketAddr)
+			log.Fatalln(s.ListenServerWebSocket(webSocketAddr))
+		}()
+	}
+
+	fmt.Println("proxy listen tcp at", address)
+	log.Fatalln(s.ListenServeTCP(address))
 }
