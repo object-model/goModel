@@ -187,10 +187,10 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 	}
 }
 
-func newMetaCheckErrorEvent(modelName string, addr string, checkErr error) message.StateOrEventMessage {
+func (s *Server) pushMetaCheckErrorEvent(checkErr error, m *model) {
 	args := map[string]interface{}{
-		"modelName": modelName,
-		"addr":      addr,
+		"modelName": m.MetaInfo.Name,
+		"addr":      m.RemoteAddr().String(),
 		"error":     checkErr.Error(),
 	}
 
@@ -214,17 +214,55 @@ func newMetaCheckErrorEvent(modelName string, addr string, checkErr error) messa
 		panic(err)
 	}
 
-	return message.StateOrEventMessage{
-		Name:     "metaCheckError",
+	event := message.StateOrEventMessage{
 		Source:   "proxy",
+		Name:     "metaCheckError",
 		FullData: fullData,
 	}
-}
-
-func (s *Server) pushMetaCheckErrorEvent(err error, m *model) {
-	event := newMetaCheckErrorEvent(m.MetaInfo.Name, m.RemoteAddr().String(), err)
 
 	// 无论m是否订阅metaCheckError事件都主动推送
+	m.writeChan <- event.FullData
+
+	// 正常推送事件
+	s.eventChan <- event
+
+	// NOTE: 延时关闭连接，尽量确保状态event能发送
+	time.Sleep(time.Second)
+}
+
+func (s *Server) pushRepeatModelNameEvent(m *model) {
+	args := map[string]interface{}{
+		"modelName": m.MetaInfo.Name,
+		"addr":      m.RemoteAddr().String(),
+	}
+
+	eventPayload := message.EventPayload{
+		Name: "repeatModelNameError",
+		Args: args,
+	}
+
+	eventPayloadData, err := jsoniter.Marshal(eventPayload)
+	if err != nil {
+		panic(err)
+	}
+
+	msg := message.Message{
+		Type:    "event",
+		Payload: eventPayloadData,
+	}
+
+	fullData, err := jsoniter.Marshal(msg)
+	if err != nil {
+		panic(err)
+	}
+
+	event := message.StateOrEventMessage{
+		Source:   "proxy",
+		Name:     "repeatModelNameError",
+		FullData: fullData,
+	}
+
+	// 无论m是否订阅repeatModelNameError事件都主动推送
 	m.writeChan <- event.FullData
 
 	// 正常推送事件

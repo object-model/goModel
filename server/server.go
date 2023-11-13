@@ -190,7 +190,7 @@ func onResp(connections map[string]connection, resp message.ResponseMessage,
 func (s *Server) onAddConn(connections map[string]connection, m *model) {
 	// 模型名称重复，直接关闭连接
 	if _, repeat := connections[m.MetaInfo.Name]; repeat {
-		_ = m.Close()
+		go s.pushRepeatModelNameEvent(m)
 		return
 	}
 	// 订阅所有状态

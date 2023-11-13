@@ -65,7 +65,27 @@ const proxyMetaJSON = `
                         "type": "string"
                     }
                 ]
-            }
+            },
+
+            {
+                "name": "repeatModelNameError",
+                "description": "物模型名称重复错误事件",
+                "args": [
+
+                    {
+                        "name": "modelName",
+                        "description": "名称重复的物模型名称",
+                        "type": "string"
+                    },
+
+                    {
+                        "name": "addr",
+                        "description": "名称重复的物模型的IP地址:端口号",
+                        "type": "string"
+                    }
+                ]
+            },
+
 		],
 		"method": [
             {
