@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/binary"
 	"net"
+	"time"
 )
 
 type tcpConn struct {
@@ -41,7 +42,8 @@ func (conn *tcpConn) WriteMsg(msg []byte) error {
 }
 
 func NewTcpConn(rawConn *net.TCPConn) ModelConn {
-	// TODO: 添加 Keep-Alive 选项
+	_ = rawConn.SetKeepAlive(true)
+	_ = rawConn.SetKeepAlivePeriod(time.Second * 5)
 	return &tcpConn{
 		rawConn,
 	}
