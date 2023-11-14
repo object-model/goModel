@@ -6,7 +6,7 @@ import (
 )
 
 type tcpConn struct {
-	net.Conn
+	*net.TCPConn
 }
 
 func (conn *tcpConn) ReadMsg() ([]byte, error) {
@@ -40,7 +40,8 @@ func (conn *tcpConn) WriteMsg(msg []byte) error {
 	return err
 }
 
-func NewTcpConn(rawConn net.Conn) ModelConn {
+func NewTcpConn(rawConn *net.TCPConn) ModelConn {
+	// TODO: 添加 Keep-Alive 选项
 	return &tcpConn{
 		rawConn,
 	}

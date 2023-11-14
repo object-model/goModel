@@ -61,13 +61,17 @@ type connection struct {
 }
 
 func (s *Server) ListenServeTCP(addr string) error {
-	l, err := net.Listen("tcp", addr)
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return err
+	}
+	l, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
 		return err
 	}
 
 	for {
-		rawConn, err := l.Accept()
+		rawConn, err := l.AcceptTCP()
 		if err != nil {
 			return err
 		}
