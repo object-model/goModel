@@ -48,7 +48,7 @@ const proxyMetaJSON = `
                 "description": "物模型元信息校验错误事件",
                 "args": [
                     {
-                        "name": "error"
+                        "name": "error",
                         "description": "校验错误提示信息",
                         "type": "string"
                     },
@@ -84,8 +84,7 @@ const proxyMetaJSON = `
                         "type": "string"
                     }
                 ]
-            },
-
+            }
 		],
 		"method": [
             {
