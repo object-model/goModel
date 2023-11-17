@@ -270,4 +270,6 @@ func (s *Server) pushRepeatModelNameEvent(m *model) {
 
 	// NOTE: 延时关闭连接，尽量确保状态event能发送
 	time.Sleep(time.Second)
+
+	_ = m.Close()
 }

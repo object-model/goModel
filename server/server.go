@@ -223,7 +223,10 @@ func (s *Server) onAddConn(connections map[string]connection, m *model) {
 
 func (s *Server) onRemoveConn(connections map[string]connection, m *model,
 	respWaiters map[string]string) {
-	if conn, seen := connections[m.MetaInfo.Name]; seen {
+	// NOTE: 需要判断模型是否添加,
+	// NOTE: 目的是防止重名的模型在退出时把原先好的物模型给删除了,
+	// NOTE: 导致原先好的物模型发送报文时出错，导致程序崩溃
+	if conn, seen := connections[m.MetaInfo.Name]; seen && m.isAdded() {
 		// 通知所有等待本连接响应报文的调用请求 可以不用等了
 		errStr := fmt.Sprintf("model %q have quit", m.MetaInfo.Name)
 		empty := make(map[string]interface{})

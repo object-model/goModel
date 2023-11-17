@@ -70,6 +70,15 @@ func (m *model) setAdded() {
 	})
 }
 
+func (m *model) isAdded() bool {
+	select {
+	case <-m.added:
+		return true
+	default:
+		return false
+	}
+}
+
 func (m *model) queryMeta(timeout time.Duration) error {
 	m.queryOnce.Do(func() {
 		m.writeChan <- []byte(queryMetaJSON)
