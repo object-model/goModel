@@ -12,12 +12,11 @@ import (
 	"time"
 )
 
-const queryMetaJSON = `
+var queryMetaJSON = strings.Join(strings.Fields(`
 {
 	"type": "query-meta",
 	"payload": null
-}
-`
+}`), "")
 
 type ModelConn interface {
 	Close() error

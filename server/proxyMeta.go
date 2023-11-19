@@ -1,7 +1,9 @@
 package server
 
+import "strings"
+
 // proxyMetaJSON 表示代理的物模型描述元信息
-const proxyMetaJSON = `
+var proxyMetaJSON = strings.Join(strings.Fields(`
 {
 	"type": "meta-info",
 	"payload": {
@@ -271,16 +273,14 @@ const proxyMetaJSON = `
             }
         ]
 	}
-}
-`
+}`), "")
 
 // noneMetaJSON 表示空物模型描述元信息
-const noneMetaJSON = `
+var noneMetaJSON = strings.Join(strings.Fields(`
 {
 	"name": "none",
 	"description": "空物模型",
 	"state": [],
 	"event": [],
 	"method": []
-}
-`
+}`), "")
