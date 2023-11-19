@@ -43,6 +43,7 @@ type Server struct {
 }
 
 // New 创建一个数据日志写入对象为dataLogWriter的物模型代理服务器.
+// 代理从物模型接收的报文数据和向物模型写入的数据都将写入dataLogWriter.
 // 如果dataLogWriter为nil, 所有收发的数据将丢弃.
 func New(dataLogWriter io.Writer) *Server {
 	if dataLogWriter == nil {
