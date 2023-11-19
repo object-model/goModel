@@ -18,6 +18,13 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+// Server 为物模型代理服务器, 用于转发物模型发送的各种报文,
+// 包括状态报文、事件报文、调用请求报文和调用响应报文.
+// 通过代理服务，物模型可以订阅代理管理的其他物模型的状态和事件，调用方法.
+// 同时 Server 本身也是一个物模型，其提供物模型上线事件、下线事件、元信息校验错误事件、物模型名称重复事件、
+// 获取当前在线的所有物模型信息方法、获取指定名称的物模型信息方法、查询某个物模型是否在线方法、
+// 获取某个物模型的状态订阅列表方法、获取某个物模型的事件订阅列表方法.
+// 物模型可以通过tcp或websocket接口与代理服务器建立连接.
 type Server struct {
 	addConnChan    chan *model                         // 添加链路通道
 	removeConnChan chan *model                         // 删除链路通道
@@ -69,6 +76,14 @@ type connection struct {
 	pubEvents map[string]struct{} // 事件发布表, 用于记录哪些事件可以发送到链路上
 }
 
+// ListenServeTCP 会监听tcp网络地址addr, 等待物模型与之建立tcp连接.
+// 每当有物模型与代理服务s建立连接，代理s都会首先向物模型发送元信息查询报文,
+// 并等待其元信息报文，等待超时为5s.
+// 当收到元信息报文时，代理首先会检查其元信息是否符合物模型规范, 只有检查通过才能进一步处理.
+// 若不满足，则会推送元信息校验错误事件（也会向这个出错的物模型推送一份）, 并断开连接.
+// 随后，代理s会检查刚建立连接的物模型其名称是否和现有已添加的物模型的冲突，
+// 若名称重复，则会提送物模型名称重复事件（也会向刚建立连接的物模型推送一份），并断开连接.
+// 最后，代理s会订阅新建立连接的所有事件和状态, 并添加到其列表中, 进行报文的转发服务.
 func (s *Server) ListenServeTCP(addr string) error {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -89,7 +104,9 @@ func (s *Server) ListenServeTCP(addr string) error {
 	}
 }
 
-func (s *Server) ListenServerWebSocket(addr string) error {
+// ListenServeWebSocket 会监听websocket地址http://addr, 等待物模型与与其建立websocket连接.
+// 连接建立后的处理过程和 ListenServeTCP 相同。
+func (s *Server) ListenServeWebSocket(addr string) error {
 	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		conn, err := upgrader.Upgrade(writer, request, nil)
 		if err != nil {

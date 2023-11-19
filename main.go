@@ -45,7 +45,7 @@ func main() {
 	if webSocket {
 		go func() {
 			fmt.Println("proxy listen websocket at", webSocketAddr)
-			log.Fatalln(s.ListenServerWebSocket(webSocketAddr))
+			log.Fatalln(s.ListenServeWebSocket(webSocketAddr))
 		}()
 	}
 
