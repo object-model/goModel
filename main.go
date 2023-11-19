@@ -54,7 +54,8 @@ func main() {
 	// 开启记录收发报文到日志
 	if saveLogFile {
 		// 以当前时间建立日志文件
-		file, err := os.Create(fmt.Sprintf("%s.log",
+		_ = os.Mkdir("./logs", os.ModePerm)
+		file, err := os.Create(fmt.Sprintf("./logs/%s.log",
 			time.Now().Format("[2006-01-02 15.04.05]")))
 		if err != nil {
 			panic(err)
