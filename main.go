@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"proxy/server"
+	"time"
 )
 
 const Version = "0.0.1"
@@ -19,10 +20,14 @@ func main() {
 	var webSocketAddr string
 	var address string
 	var showVersion bool
+	var printDataLog bool
+	var saveLogFile bool
 	flag.BoolVar(&webSocket, "ws", false, "whether or not to run websocket service")
 	flag.StringVar(&webSocketAddr, "wsAddr", "0.0.0.0:9090", "proxy websocket address")
 	flag.StringVar(&address, "addr", "0.0.0.0:8080", "proxy tcp address")
-	flag.BoolVar(&showVersion, "v", false, "show version of proxy")
+	flag.BoolVar(&printDataLog, "p", false, "whether or not to print send and received message on console")
+	flag.BoolVar(&saveLogFile, "logfile", false, "whether or not to save send and received message to file")
+	flag.BoolVar(&showVersion, "v", false, "show version of proxy and quit")
 
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
@@ -39,7 +44,26 @@ func main() {
 		return
 	}
 
-	s := server.New(io.Discard)
+	var logWriters []io.Writer
+
+	// 开启控制台打印收发报文
+	if printDataLog {
+		logWriters = append(logWriters, os.Stdout)
+	}
+
+	// 开启记录收发报文到日志
+	if saveLogFile {
+		// 以当前时间建立日志文件
+		file, err := os.Create(fmt.Sprintf("%s.log",
+			time.Now().Format("[2006-01-02 15.04.05]")))
+		if err != nil {
+			panic(err)
+		}
+		defer file.Close()
+		logWriters = append(logWriters, file)
+	}
+
+	s := server.New(io.MultiWriter(logWriters...))
 
 	// 开启webSocket服务
 	if webSocket {
