@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
+	"log"
 	"net"
 	"proxy/message"
 	"proxy/meta"
@@ -49,6 +50,7 @@ type model struct {
 	quitWriterOnce sync.Once                             // 保证 writerQuit 只关闭一次
 	addedOnce      sync.Once                             // 保证 added 只关闭一次
 	MetaInfo       message.MetaMessage                   // 元信息
+	log            *log.Logger                           // 记录收发数据
 }
 
 func (m *model) Close() error {
@@ -109,6 +111,9 @@ func (m *model) reader() {
 			continue
 		}
 
+		// 记录接收数据
+		m.log.Println("<--", m.RemoteAddr().String(), string(data))
+
 		// 解析JSON报文
 		msg := message.Message{}
 		if err = jsoniter.Unmarshal(data, &msg); err != nil {
@@ -133,6 +138,8 @@ func (m *model) writer() {
 			return
 		// 发送数据
 		case data := <-m.writeChan:
+			// 记录发送数据
+			m.log.Println("-->", m.RemoteAddr().String(), string(data))
 			_ = m.WriteMsg(data)
 		}
 	}
@@ -161,8 +168,6 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 	default:
 		return fmt.Errorf("invalid message type %s", msgType)
 	}
-
-	return nil
 }
 
 func (m *model) onSubState(Type string, payload []byte) error {

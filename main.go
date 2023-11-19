@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"proxy/server"
@@ -38,7 +39,7 @@ func main() {
 		return
 	}
 
-	s := server.New()
+	s := server.New(io.Discard)
 
 	// 开启webSocket服务
 	if webSocket {

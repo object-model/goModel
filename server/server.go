@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
+	"io"
+	"log"
 	"net"
 	"net/http"
 	"proxy/message"
@@ -30,9 +32,15 @@ type Server struct {
 	queryOnline    chan queryOnlineReq                 // 查询模型是否在线通道
 	querySubState  chan querySubReq                    // 查询模型的状态订阅关系
 	querySubEvent  chan querySubReq                    // 查询模型的事件订阅关系
+	log            *log.Logger                         // 记录收发的数据
 }
 
-func New() *Server {
+// New 创建一个数据日志写入对象为dataLogWriter的物模型代理服务器.
+// 如果dataLogWriter为nil, 所有收发的数据将丢弃.
+func New(dataLogWriter io.Writer) *Server {
+	if dataLogWriter == nil {
+		dataLogWriter = io.Discard
+	}
 	s := &Server{
 		addConnChan:    make(chan *model),
 		removeConnChan: make(chan *model),
@@ -47,6 +55,7 @@ func New() *Server {
 		queryOnline:    make(chan queryOnlineReq),
 		querySubState:  make(chan querySubReq),
 		querySubEvent:  make(chan querySubReq),
+		log:            log.New(dataLogWriter, "", log.LstdFlags|log.Lmicroseconds),
 	}
 	go s.run()
 	return s
@@ -339,6 +348,7 @@ func (s *Server) addModelConnection(conn ModelConn) {
 		readerQuit:     make(chan struct{}),
 		added:          make(chan struct{}),
 		metaGotChan:    make(chan struct{}),
+		log:            s.log,
 	}
 
 	go ans.writer()
