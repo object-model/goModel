@@ -23,7 +23,7 @@ func main() {
 	var showVersion bool
 	var printDataLog bool
 	var saveLogFile bool
-	flag.BoolVar(&webSocket, "ws", false, "whether or not to run websocket service")
+	flag.BoolVar(&webSocket, "ws", false, "whether to run websocket service")
 	flag.StringVar(&webSocketAddr, "wsAddr", "0.0.0.0:9090", "proxy websocket address")
 	flag.StringVar(&address, "addr", "0.0.0.0:8080", "proxy tcp address")
 	flag.BoolVar(&printDataLog, "p", false, "whether to print send and received message on console")
