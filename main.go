@@ -12,8 +12,9 @@ import (
 
 const Version = "0.0.1"
 
-const Desc = "proxy is object model proxy server which can transmit model message " +
-	"and also provides methods and events itself."
+const Desc = "Proxy is object model proxy server which can transmit model message " +
+	"and also provides methods and events itself. " +
+	"Model can connect to proxy using tcp or websocket interface."
 
 func main() {
 	var webSocket bool
