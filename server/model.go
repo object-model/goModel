@@ -163,7 +163,7 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 	case "query-meta":
 		return m.onQueryMeta()
 	case "meta-info":
-		return m.onMetaInfo(payload, fullData)
+		return m.onMetaInfo(payload)
 	default:
 		return fmt.Errorf("invalid message type %s", msgType)
 	}
@@ -400,16 +400,18 @@ func (m *model) onQueryMeta() error {
 	return nil
 }
 
-func (m *model) onMetaInfo(payload []byte, fullData []byte) error {
+func (m *model) onMetaInfo(payload []byte) error {
 	var metaInfo meta.Meta
+
+	// 解析
 	if err := jsoniter.Unmarshal(payload, &metaInfo); err != nil {
 		return err
 	}
 
 	m.onGetMetaOnce.Do(func() {
 		m.MetaInfo = message.MetaMessage{
-			Meta:     metaInfo,
-			FullData: fullData,
+			Meta:    metaInfo,
+			RawData: payload,
 		}
 		close(m.metaGotChan)
 	})

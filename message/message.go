@@ -47,7 +47,7 @@ type ResponseMessage struct {
 
 type MetaMessage struct {
 	meta.Meta
-	FullData []byte // 全报文原始数据，是Message类型序列化的结果
+	RawData []byte // 元信息JSON串原始数据
 }
 
 type SubStatePayload []string

@@ -296,7 +296,7 @@ func onQueryAllModel(connections map[string]connection, resChan chan []modelItem
 			Addr:      conn.model.RemoteAddr().String(),
 			SubStates: states,
 			SubEvents: events,
-			MetaInfo:  conn.MetaInfo.FullData,
+			MetaInfo:  conn.MetaInfo.RawData,
 		})
 	}
 	resChan <- items
@@ -322,7 +322,7 @@ func onQueryModel(connections map[string]connection, queryModel queryModelReq) {
 			info.SubEvents = append(info.SubEvents, state)
 		}
 		info.Addr = conn.RemoteAddr().String()
-		info.MetaInfo = conn.MetaInfo.FullData
+		info.MetaInfo = conn.MetaInfo.RawData
 	}
 	queryModel.ResChan <- queryModelRes{
 		ModelInfo: info,

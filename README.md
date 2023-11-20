@@ -4,6 +4,57 @@
 
 # 更新日志
 
+## 20231120
+
+1. 修复保存元信息时层级错误
+
+   原来错误的做法是，保存元信息报文时保存的是全报文的数据:
+
+   ```go
+   func (m *model) onMetaInfo(payload []byte, fullData []byte) error {
+   	var metaInfo meta.Meta
+   	if err := jsoniter.Unmarshal(payload, &metaInfo); err != nil {
+   		return err
+   	}
+   
+   	m.onGetMetaOnce.Do(func() {
+   		m.MetaInfo = message.MetaMessage{
+   			Meta:     metaInfo,
+   			FullData: fullData,
+   		}
+   		close(m.metaGotChan)
+   	})
+   
+   	return nil
+   }
+   ```
+
+   这种做法多过保存了一层，即`{"type": "meta-info", "payload": ...}`，不符合格式要求，应该只保存`"payload"`字段中的JSON串。所有该成这样：
+
+   ```go
+   func (m *model) onMetaInfo(payload []byte) error {
+   	var metaInfo meta.Meta
+   	// 去除多余的空格保持兼容性
+   	payload = []byte(strings.Join(strings.Fields(string(payload)), ""))
+   
+   	// 解析
+   	if err := jsoniter.Unmarshal(payload, &metaInfo); err != nil {
+   		return err
+   	}
+   
+   	m.onGetMetaOnce.Do(func() {
+   		m.MetaInfo = message.MetaMessage{
+   			Meta:    metaInfo,
+   			RawData: payload,
+   		}
+   		close(m.metaGotChan)
+   	})
+   
+   	return nil
+   }
+   ```
+
+
 ## 20231119
 
 1. 添加收发数据日志记录功能
