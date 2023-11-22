@@ -308,7 +308,7 @@ func onQueryModel(connections map[string]connection, queryModel queryModelReq) {
 		Addr:      "",
 		SubStates: make([]string, 0),
 		SubEvents: make([]string, 0),
-		MetaInfo:  []byte(noneMetaJSON),
+		MetaInfo:  noneMetaMessage,
 	}
 	conn, seen := connections[queryModel.ModelName]
 	if seen {

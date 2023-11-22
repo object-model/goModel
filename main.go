@@ -21,6 +21,7 @@ func main() {
 	var webSocketAddr string
 	var address string
 	var showVersion bool
+	var showProxyMeta bool
 	var printDataLog bool
 	var saveLogFile bool
 	flag.BoolVar(&webSocket, "ws", false, "whether to run websocket service")
@@ -29,6 +30,7 @@ func main() {
 	flag.BoolVar(&printDataLog, "p", false, "whether to print send and received message on console")
 	flag.BoolVar(&saveLogFile, "log", false, "whether to save send and received message to file")
 	flag.BoolVar(&showVersion, "v", false, "show version of proxy and quit")
+	flag.BoolVar(&showProxyMeta, "meta", false, "show proxy meta info")
 
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage of %s:\n", os.Args[0])
@@ -43,6 +45,11 @@ func main() {
 	if showVersion {
 		fmt.Println("proxy:", Version)
 		return
+	}
+
+	// 打印代理元信息
+	if showProxyMeta {
+		fmt.Println("proxy meta", server.ProxyMetaString)
 	}
 
 	var logWriters []io.Writer

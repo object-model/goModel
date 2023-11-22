@@ -396,7 +396,7 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 }
 
 func (m *model) onQueryMeta() error {
-	m.writeChan <- []byte(proxyMetaJSON)
+	m.writeChan <- proxyMetaMessage
 	return nil
 }
 
