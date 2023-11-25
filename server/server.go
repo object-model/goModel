@@ -367,8 +367,11 @@ func (s *Server) addModelConnection(conn ModelConn) {
 		added:          make(chan struct{}),
 		metaGotChan:    make(chan struct{}),
 		log:            s.log,
+		buffer:         make(chan msg, 256),
+		bufferDone:     make(chan error, 1),
 	}
 
+	go ans.bufferMsgHandler()
 	go ans.writer()
 	go ans.reader()
 

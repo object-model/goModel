@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"log"
@@ -29,6 +30,12 @@ type ModelConn interface {
 	WriteMsg(msg []byte) error
 }
 
+type msg struct {
+	msgType  string
+	payload  []byte
+	fullData []byte
+}
+
 type model struct {
 	ModelConn                                            // 原始连接
 	readerQuit     chan struct{}                         // 退出 reader 的信号
@@ -50,6 +57,8 @@ type model struct {
 	addedOnce      sync.Once                             // 保证 added 只关闭一次
 	MetaInfo       message.MetaMessage                   // 元信息
 	log            *log.Logger                           // 记录收发数据
+	buffer         chan msg                              // 挂起的报文
+	bufferDone     chan error                            // 挂起报文处理完成信号
 }
 
 func (m *model) Close() error {
@@ -144,7 +153,60 @@ func (m *model) writer() {
 	}
 }
 
+func (m *model) bufferMsgHandler() {
+	var err error = nil
+	defer func() {
+		m.bufferDone <- err
+	}()
+	select {
+	case <-m.added:
+		for msg := range m.buffer {
+			err = m.dealTransMsg(msg.msgType, msg.payload, msg.fullData)
+			if err != nil {
+				break
+			}
+		}
+	case <-m.readerQuit:
+		return
+	}
+}
+
 func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
+	switch msgType {
+	case "set-subscribe-state", "add-subscribe-state",
+		"remove-subscribe-state", "clear-subscribe-state",
+		"set-subscribe-event", "add-subscribe-event",
+		"remove-subscribe-event", "clear-subscribe-event",
+		"state", "event", "call", "response":
+		select {
+		case <-m.added:
+			close(m.buffer)
+			if err := <-m.bufferDone; err != nil {
+				return err
+			}
+			return m.dealTransMsg(msgType, payload, fullData)
+		default:
+			select {
+			case m.buffer <- msg{
+				msgType:  msgType,
+				payload:  payload,
+				fullData: fullData,
+			}:
+			default:
+				return errors.New("to much message cached")
+			}
+		}
+	case "query-meta":
+		return m.onQueryMeta()
+	case "meta-info":
+		return m.onMetaInfo(payload)
+	default:
+		return fmt.Errorf("invalid message type %s", msgType)
+	}
+	return nil
+}
+
+func (m *model) dealTransMsg(msgType string, payload []byte, fullData []byte) error {
 	switch msgType {
 	case "set-subscribe-state", "add-subscribe-state",
 		"remove-subscribe-state", "clear-subscribe-state":
@@ -160,13 +222,8 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 		return m.onCall(payload, fullData)
 	case "response":
 		return m.onResp(payload, fullData)
-	case "query-meta":
-		return m.onQueryMeta()
-	case "meta-info":
-		return m.onMetaInfo(payload)
-	default:
-		return fmt.Errorf("invalid message type %s", msgType)
 	}
+	return nil
 }
 
 func (m *model) onSubState(Type string, payload []byte) error {
@@ -187,28 +244,6 @@ func (m *model) onSubState(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	select {
-	case <-m.added:
-		return m.pushSubStateReq(option, states)
-	default:
-		// NOTE: 必须开启新协程
-		// NOTE: 否则会导致死锁一段时间后, 连接关闭
-		go func() {
-			// 等待 Server 完全添加了自己
-			// 或者 reader 主动退出
-			select {
-			case <-m.added:
-			case <-m.readerQuit:
-				return
-			}
-			_ = m.pushSubStateReq(option, states)
-		}()
-	}
-
-	return nil
-}
-
-func (m *model) pushSubStateReq(option int, states []string) error {
 	m.subStateChan <- message.SubStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
@@ -236,28 +271,6 @@ func (m *model) onSubEvent(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	select {
-	case <-m.added:
-		return m.pushSubEventReq(option, events)
-	default:
-		// NOTE: 必须开启新协程
-		// NOTE: 否则会导致死锁一段时间后, 连接关闭
-		go func() {
-			// 等待 Server 完全添加了自己
-			// 或者 reader 主动退出
-			select {
-			case <-m.added:
-			case <-m.readerQuit:
-				return
-			}
-			_ = m.pushSubEventReq(option, events)
-		}()
-	}
-
-	return nil
-}
-
-func (m *model) pushSubEventReq(option int, events []string) error {
 	m.subEventChan <- message.SubStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
@@ -272,29 +285,9 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	select {
-	case <-m.added:
-		return m.pushState(state.Name, fullData)
-	default:
-		go func() {
-			// 等待 Server 完全添加了自己
-			// 或者 reader 主动退出
-			select {
-			case <-m.added:
-			case <-m.readerQuit:
-				return
-			}
-			_ = m.pushState(state.Name, fullData)
-		}()
-	}
-
-	return nil
-}
-
-func (m *model) pushState(name string, fullData []byte) error {
 	m.stateBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
-		Name:     name,
+		Name:     state.Name,
 		FullData: fullData,
 	}
 	return nil
@@ -306,29 +299,9 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	select {
-	case <-m.added:
-		return m.pushEvent(event.Name, fullData)
-	default:
-		go func() {
-			// 等待 Server 完全添加了自己
-			// 或者 reader 主动退出
-			select {
-			case <-m.added:
-			case <-m.readerQuit:
-				return
-			}
-			_ = m.pushEvent(event.Name, fullData)
-		}()
-	}
-
-	return nil
-}
-
-func (m *model) pushEvent(name string, fullData []byte) error {
 	m.eventBroadcast <- message.StateOrEventMessage{
 		Source:   m.MetaInfo.Name,
-		Name:     name,
+		Name:     event.Name,
 		FullData: fullData,
 	}
 	return nil
@@ -347,28 +320,6 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		return nil
 	}
 
-	select {
-	case <-m.added:
-		return m.pushCallReq(modelName, methodName, call, fullData)
-	default:
-		// NOTE: 必须开启新协程
-		// NOTE: 否则会导致死锁一段时间后, 连接关闭
-		go func() {
-			// 等待 Server 完全添加了自己之后，推送调用请求
-			// 或者 reader 主动退出
-			select {
-			case <-m.added:
-			case <-m.readerQuit:
-				return
-			}
-			_ = m.pushCallReq(modelName, methodName, call, fullData)
-		}()
-	}
-
-	return nil
-}
-
-func (m *model) pushCallReq(modelName string, methodName string, call message.CallPayload, fullData []byte) error {
 	m.callChan <- message.CallMessage{
 		Source:   m.MetaInfo.Name,
 		Model:    modelName,
