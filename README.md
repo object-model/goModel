@@ -15,7 +15,37 @@
 
 # 命令行参数
 
+代理服务提供了丰富的命令行参数，用于控制代理服务的运行配置。用户可以通过运行`./proxy -help`查看代理服务的使用说明：
 
+```c++
+Usage of ./proxy:
+  -addr string
+        proxy tcp address (default "0.0.0.0:8080")
+  -log
+        whether to save send and received message to file
+  -meta
+        show proxy meta info
+  -p    whether to print send and received message on console
+  -v    show version of proxy and quit
+  -ws
+        whether to run websocket service
+  -wsAddr string
+        proxy websocket address (default "0.0.0.0:9090")
+
+Proxy is object model proxy server which can transmit model message and also provides methods and events itself. Model can connect to proxy using tcp or websocket interface.
+```
+
+代理服务所包含的命令行参数如下：
+
+| 参数      | 含义                                                         | 默认值       |
+| --------- | ------------------------------------------------------------ | ------------ |
+| `-addr`   | 代理服务的TCP监听地址，物模型可以使用TCP协议连接到此地址与代理服务建立连接 | 0.0.0.0:8080 |
+| `-log`    | 是否将收发的数据保存到日志文件中                             | false        |
+| `-meta`   | 是否打印代理服务本身的物模型描述信息                         | false        |
+| `-p`      | 是否将收发的数据打印到控制台中                               | false        |
+| `-v`      | 是否打印代理服务的版本号并退出程序                           | false        |
+| `-ws`     | 是否开启WebSocket服务，当开启后，物模型可以通过WebSocket与代理服务建立连接 | false        |
+| `-wsAddr` | WebSocket监听地址，物模型可以使用WebSocket协议连接到此地址与代理服务建立连接 | 0.0.0.0:9090 |
 
 # 代理服务的物模型
 
