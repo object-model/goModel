@@ -49,7 +49,319 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 代理服务的物模型
 
+代理服务本身也是一个物模型，本身也提供了一些和代理相关的事件和方法，代理物模型的描述JSON串如下：
 
+```json
+{
+    "name": "proxy",
+    "description": "model proxy service",
+    "state": [],
+    "event": [
+        {
+            "name": "online",
+            "description": "模型上线事件",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "上线的物模型名称",
+                    "type": "string"
+                },
+                {
+                    "name": "addr",
+                    "description": "IP地址:端口号",
+                    "type": "string"
+                }
+            ]
+        },
+
+        {
+            "name": "offline",
+            "description": "模型下线事件",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "下线的物模型名称",
+                    "type": "string"
+                },
+                {
+                    "name": "addr",
+                    "description": "IP地址:端口号",
+                    "type": "string"
+                }
+            ]
+        },
+
+        {
+            "name": "metaCheckError",
+            "description": "物模型元信息校验错误事件",
+            "args": [
+                {
+                    "name": "error",
+                    "description": "校验错误提示信息",
+                    "type": "string"
+                },
+
+                {
+                    "name": "modelName",
+                    "description": "校验出错的物模型名称",
+                    "type": "string"
+                },
+
+                {
+                    "name": "addr",
+                    "description": "校验出错的物模型的地址",
+                    "type": "string"
+                }
+            ]
+        },
+
+        {
+            "name": "repeatModelNameError",
+            "description": "物模型名称重复错误事件",
+            "args": [
+
+                {
+                    "name": "modelName",
+                    "description": "名称重复的物模型名称",
+                    "type": "string"
+                },
+
+                {
+                    "name": "addr",
+                    "description": "名称重复的物模型的地址",
+                    "type": "string"
+                }
+            ]
+        }
+    ],
+    "method": [
+        {
+            "name": "GetAllModel",
+            "description": "获取本代理下当前在线的所有物模型信息",
+            "args": [],
+            "response": [
+                {
+                    "name": "modelList",
+                    "description": "在线的物模型信息列表",
+                    "type": "slice",
+                    "element": {
+                        "type": "struct",
+                        "fields": [
+                            {
+                                "name": "modelName",
+                                "description": "物模型名称",
+                                "type": "string"
+                            },
+                            {
+                                "name": "addr",
+                                "description": "地址",
+                                "type": "string"
+                            },
+                            {
+                                "name": "subStates",
+                                "description": "状态订阅列表",
+                                "type": "slice",
+                                "element": {
+                                    "type": "string"
+                                }
+                            },
+                            {
+                                "name": "subEvents",
+                                "description": "事件订阅列表",
+                                "type": "slice",
+                                "element": {
+                                    "type": "string"
+                                }
+                            },
+                            {
+                                "name": "metaInfo",
+                                "description": "模型元信息",
+                                "type": "meta"
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+
+        {
+            "name": "GetModel",
+            "description": "获取指定名称的物模型的信息",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "物模型名称",
+                    "type": "string"
+                }
+            ],
+
+            "response": [
+                {
+                    "name": "modelInfo",
+                    "description": "物模型信息",
+                    "type": "struct",
+                    "fields": [
+                        {
+                            "name": "modelName",
+                            "description": "物模型名称",
+                            "type": "string"
+                        },
+                        {
+                            "name": "addr",
+                            "description": "地址",
+                            "type": "string"
+                        },
+                        {
+                            "name": "subStates",
+                            "description": "状态订阅列表",
+                            "type": "slice",
+                            "element": {
+                                "type": "string"
+                            }
+                        },
+                        {
+                            "name": "subEvents",
+                            "description": "事件订阅列表",
+                            "type": "slice",
+                            "element": {
+                                "type": "string"
+                            }
+                        },
+                        {
+                            "name": "metaInfo",
+                            "description": "模型元信息",
+                            "type": "meta"
+                        }
+                    ]
+                },
+
+                {
+                    "name": "got",
+                    "description": "是否获取成功，不在线返回false",
+                    "type": "bool"
+                }
+            ]
+
+        },
+
+        {
+            "name": "ModelIsOnline",
+            "description": "查询指定名称的物模型是否在线",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "物模型名称",
+                    "type": "string"
+                }
+            ],
+            "response": [
+                {
+                    "name": "isOnline",
+                    "description": "是否在线",
+                    "type": "bool"
+                }
+            ]
+        },
+
+        {
+            "name": "GetSubState",
+            "description": "获取指定名称的物模型的状态订阅列表",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "物模型名称",
+                    "type": "string"
+                }
+            ],
+            "response": [
+                {
+                    "name": "subList",
+                    "description": "状态订阅列表",
+                    "type": "slice",
+                    "element": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "got",
+                    "description": "是否获取成功，不在线返回false",
+                    "type": "bool"
+                }
+            ]
+        },
+
+        
+        {
+            "name": "GetSubEvent",
+            "description": "获取指定名称的物模型的事件订阅列表",
+            "args": [
+                {
+                    "name": "modelName",
+                    "description": "物模型名称",
+                    "type": "string"
+                }
+            ],
+            "response": [
+                {
+                    "name": "subList",
+                    "description": "事件订阅列表",
+                    "type": "slice",
+                    "element": {
+                        "type": "string"
+                    }
+                },
+                {
+                    "name": "got",
+                    "description": "是否获取成功，不在线返回false",
+                    "type": "bool"
+                }
+            ]
+        }
+    ]
+}
+```
+
+## 事件
+
+### 物模型上线事件
+
+- **事件名：**`proxy/online`
+- **作用：**通知感兴趣的物模型，代理服务添加了新的物模型
+- **触发时机：**当物模型与代理服务建立连接，并且其元信息检查无误，同时名称又不与代理服务管理的其他物模型冲突时，会触发此事件
+- **参数：**上线的物模型名称、地址信息
+
+### 物模型下线事件
+
+- **事件名：**`proxy/offline`
+- **作用：**通知感兴趣的物模型，代理服务从其管理的物模型中删除了某个物模型
+- **触发时机：**当被代理服务管理的物模型由于某种原因需要断开连接时，代理会删除此物模型，同时触发该事件
+- **参数：**删除的物模型名称、地址信息
+
+### 物模型元信息校验错误事件
+
+- **事件名：**`proxy/metaCheckError`
+- **作用：**通知感兴趣的物模型，某个刚建立连接的物模型的元信息校验不通过
+- **触发时机：**当代理服务发现刚建立连接的物模型的元信息不符合物模型架构规范时，会触发该事件
+- **参数：**校验不通过的物模型名称、地址信息和校验错误提示信息
+
+### 物模型名称重复事件
+
+- **事件名：**`proxy/repeatModelNameError`
+- **作用：**通知感兴趣的物模型，某个刚建立连接的物模型的名称和其他的物模型有冲突
+- **触发时机：**当代理服务发现刚建立连接的物模型的名称与其管理的其他物模型的名称重复时，会触发该事件
+- **参数：**名称重复的物模型名称、地址信息
+
+## 方法
+
+### 获取本代理下当前在线的所有物模型信息
+
+### 获取指定名称的物模型信息
+
+### 查询指定名称的物模型是否在线
+
+### 获取指定名称的物模型的状态订阅列表
+
+### 获取指定名称的物模型的事件订阅列表
 
 # 更新日志
 

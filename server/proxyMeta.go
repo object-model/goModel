@@ -65,7 +65,7 @@ const ProxyMetaString = `
 
                 {
                     "name": "addr",
-                    "description": "校验出错的物模型的IP地址:端口号",
+                    "description": "校验出错的物模型的地址",
                     "type": "string"
                 }
             ]
@@ -84,7 +84,7 @@ const ProxyMetaString = `
 
                 {
                     "name": "addr",
-                    "description": "名称重复的物模型的IP地址:端口号",
+                    "description": "名称重复的物模型的地址",
                     "type": "string"
                 }
             ]
@@ -110,7 +110,7 @@ const ProxyMetaString = `
                             },
                             {
                                 "name": "addr",
-                                "description": "IP地址:端口号",
+                                "description": "地址",
                                 "type": "string"
                             },
                             {
@@ -142,7 +142,7 @@ const ProxyMetaString = `
 
         {
             "name": "GetModel",
-            "description": "获取指定名称的物模型的",
+            "description": "获取指定名称的物模型的信息",
             "args": [
                 {
                     "name": "modelName",
@@ -164,7 +164,7 @@ const ProxyMetaString = `
                         },
                         {
                             "name": "addr",
-                            "description": "IP地址:端口号",
+                            "description": "地址",
                             "type": "string"
                         },
                         {
@@ -202,7 +202,7 @@ const ProxyMetaString = `
 
         {
             "name": "ModelIsOnline",
-            "description": "查询某个物模型是否在线",
+            "description": "查询指定名称的物模型是否在线",
             "args": [
                 {
                     "name": "modelName",
@@ -221,7 +221,7 @@ const ProxyMetaString = `
 
         {
             "name": "GetSubState",
-            "description": "获取某个物模型的状态订阅列表",
+            "description": "获取指定名称的物模型的状态订阅列表",
             "args": [
                 {
                     "name": "modelName",
@@ -249,7 +249,7 @@ const ProxyMetaString = `
         
         {
             "name": "GetSubEvent",
-            "description": "获取某个物模型的事件订阅列表",
+            "description": "获取指定名称的物模型的事件订阅列表",
             "args": [
                 {
                     "name": "modelName",
