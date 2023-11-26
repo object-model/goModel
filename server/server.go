@@ -363,12 +363,14 @@ func (s *Server) addModelConnection(conn ModelConn) {
 		subEventChan:   s.subEventChan,
 		writeChan:      make(chan []byte, 256),
 		writerQuit:     make(chan struct{}),
-		readerQuit:     make(chan struct{}),
+		bufferQuit:     make(chan struct{}),
 		added:          make(chan struct{}),
 		metaGotChan:    make(chan struct{}),
 		log:            s.log,
 		buffer:         make(chan msg, 256),
-		bufferDone:     make(chan error, 1),
+		bufferDone:     make(chan struct{}),
+		bufferErr:      make(chan struct{}),
+		bufferExit:     make(chan struct{}),
 	}
 
 	go ans.bufferMsgHandler()

@@ -37,33 +37,41 @@ type msg struct {
 }
 
 type model struct {
-	ModelConn                                            // 原始连接
-	readerQuit     chan struct{}                         // 退出 reader 的信号
-	writerQuit     chan struct{}                         // 退出 writer 的信号
-	added          chan struct{}                         // 连接已经加入 Server 信号
-	removeConnCh   chan<- *model                         // 删除连接通道
-	stateBroadcast chan<- message.StateOrEventMessage    // 状态广播通道
-	eventBroadcast chan<- message.StateOrEventMessage    // 事件广播通道
-	callChan       chan<- message.CallMessage            // 调用请求通道
-	respChan       chan<- message.ResponseMessage        // 响应结果通道
-	subStateChan   chan<- message.SubStateOrEventMessage // 更新状态订阅写入通道
-	subEventChan   chan<- message.SubStateOrEventMessage // 更新事件订阅写入通道
-	writeChan      chan []byte                           // 数据写入通道
-	metaGotChan    chan struct{}                         // 收到元信息消息通道
-	queryOnce      sync.Once                             // 保证只查询一次元信息
-	onGetMetaOnce  sync.Once                             // 保证只响应一次元信息结果报文
-	quitReaderOnce sync.Once                             // 保证 readerQuit 只关闭一次
-	quitWriterOnce sync.Once                             // 保证 writerQuit 只关闭一次
-	addedOnce      sync.Once                             // 保证 added 只关闭一次
-	MetaInfo       message.MetaMessage                   // 元信息
-	log            *log.Logger                           // 记录收发数据
-	buffer         chan msg                              // 挂起的报文
-	bufferDone     chan error                            // 挂起报文处理完成信号
+	ModelConn                                             // 原始连接
+	bufferQuit      chan struct{}                         // 退出 bufferMsgHandler 的信号
+	writerQuit      chan struct{}                         // 退出 writer 的信号
+	added           chan struct{}                         // 连接已经加入 Server 信号
+	removeConnCh    chan<- *model                         // 删除连接通道
+	stateBroadcast  chan<- message.StateOrEventMessage    // 状态广播通道
+	eventBroadcast  chan<- message.StateOrEventMessage    // 事件广播通道
+	callChan        chan<- message.CallMessage            // 调用请求通道
+	respChan        chan<- message.ResponseMessage        // 响应结果通道
+	subStateChan    chan<- message.SubStateOrEventMessage // 更新状态订阅写入通道
+	subEventChan    chan<- message.SubStateOrEventMessage // 更新事件订阅写入通道
+	writeChan       chan []byte                           // 数据写入通道
+	metaGotChan     chan struct{}                         // 收到元信息消息通道
+	queryOnce       sync.Once                             // 保证只查询一次元信息
+	onGetMetaOnce   sync.Once                             // 保证只响应一次元信息结果报文
+	bufferQuitOnce  sync.Once                             // 保证 bufferQuit 只关闭一次
+	quitWriterOnce  sync.Once                             // 保证 writerQuit 只关闭一次
+	addedOnce       sync.Once                             // 保证 added 只关闭一次
+	MetaInfo        message.MetaMessage                   // 元信息
+	log             *log.Logger                           // 记录收发数据
+	bufferCloseOnce sync.Once                             // 保证buffer仅关闭一次
+	buffer          chan msg                              // 挂起的报文
+	bufferDone      chan struct{}                         // 挂起报文处理完成信号
+	bufferErr       chan struct{}                         // 挂起报文处理出错信号
+	bufferExit      chan struct{}                         // bufferMsgHandler 退出信号
 }
 
 func (m *model) Close() error {
-	m.quitReaderOnce.Do(func() {
-		close(m.readerQuit)
+	// 保证在未添加的情况下, 退出 bufferMsgHandler
+	m.bufferQuitOnce.Do(func() {
+		close(m.bufferQuit)
+	})
+	// 保证在已添加的情况下, 退出 bufferMsgHandler
+	m.bufferCloseOnce.Do(func() {
+		close(m.buffer)
 	})
 	return m.ModelConn.Close()
 }
@@ -106,7 +114,13 @@ func (m *model) queryMeta(timeout time.Duration) error {
 
 func (m *model) reader() {
 	defer func() {
-		m.removeConnCh <- m // 通过Server退出writer
+		// NOTE: 主动关闭，保证 bufferMsgHandler 一定能退出
+		_ = m.Close()
+		// NOTE: 必须等待 bufferMsgHandler 完全退出了
+		// NOTE: 否则，会导致提前删除了m, 进一步导致可能出现访问无效内存
+		<-m.bufferExit
+		// 通过Server退出writer
+		m.removeConnCh <- m
 	}()
 	for {
 		// 读取报文
@@ -154,25 +168,26 @@ func (m *model) writer() {
 }
 
 func (m *model) bufferMsgHandler() {
-	var err error = nil
-	defer func() {
-		m.bufferDone <- err
-	}()
+	defer close(m.bufferExit)
 	select {
 	case <-m.added:
 		for msg := range m.buffer {
-			err = m.dealTransMsg(msg.msgType, msg.payload, msg.fullData)
+			err := m.dealTransMsg(msg.msgType, msg.payload, msg.fullData)
 			if err != nil {
-				break
+				close(m.bufferErr)
+				return
 			}
 		}
-	case <-m.readerQuit:
-		return
+		close(m.bufferDone)
+	case <-m.bufferQuit:
 	}
 }
 
 func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 	switch msgType {
+	// NOTE: 所有需要处理或者转发的报文都需要等待代理完成添加,
+	// NOTE: 并等待添加前排队挂起的报文都处理完毕或者出错!
+	// NOTE: 目的是严格保证报文的处理顺序!
 	case "set-subscribe-state", "add-subscribe-state",
 		"remove-subscribe-state", "clear-subscribe-state",
 		"set-subscribe-event", "add-subscribe-event",
@@ -180,11 +195,15 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 		"state", "event", "call", "response":
 		select {
 		case <-m.added:
-			close(m.buffer)
-			if err := <-m.bufferDone; err != nil {
-				return err
+			m.bufferCloseOnce.Do(func() {
+				close(m.buffer)
+			})
+			select {
+			case <-m.bufferDone:
+				return m.dealTransMsg(msgType, payload, fullData)
+			case <-m.bufferErr:
+				return errors.New("buffered message error")
 			}
-			return m.dealTransMsg(msgType, payload, fullData)
 		default:
 			select {
 			case m.buffer <- msg{
@@ -193,7 +212,7 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 				fullData: fullData,
 			}:
 			default:
-				return errors.New("to much message cached")
+				return errors.New("to much cached message")
 			}
 		}
 	case "query-meta":
