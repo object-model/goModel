@@ -115,10 +115,17 @@ func (m *model) queryMeta(timeout time.Duration) error {
 func (m *model) reader() {
 	defer func() {
 		// NOTE: 主动关闭，保证 bufferMsgHandler 一定能退出
-		_ = m.Close()
+		m.bufferQuitOnce.Do(func() {
+			close(m.bufferQuit)
+		})
+		m.bufferCloseOnce.Do(func() {
+			close(m.buffer)
+		})
+
 		// NOTE: 必须等待 bufferMsgHandler 完全退出了
 		// NOTE: 否则，会导致提前删除了m, 进一步导致可能出现访问无效内存
 		<-m.bufferExit
+
 		// 通过Server退出writer
 		m.removeConnCh <- m
 	}()
