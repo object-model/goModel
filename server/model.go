@@ -55,7 +55,8 @@ type model struct {
 	bufferQuitOnce  sync.Once                             // 保证 bufferQuit 只关闭一次
 	quitWriterOnce  sync.Once                             // 保证 writerQuit 只关闭一次
 	addedOnce       sync.Once                             // 保证 added 只关闭一次
-	MetaInfo        message.MetaMessage                   // 元信息
+	MetaInfo        meta.Meta                             // 元信息
+	MetaRaw         []byte                                // 原始的元信息
 	log             *log.Logger                           // 记录收发数据
 	bufferCloseOnce sync.Once                             // 保证buffer仅关闭一次
 	buffer          chan msg                              // 挂起的报文
@@ -378,18 +379,8 @@ func (m *model) onQueryMeta() error {
 }
 
 func (m *model) onMetaInfo(payload []byte) error {
-	var metaInfo meta.Meta
-
-	// 解析
-	if err := jsoniter.Unmarshal(payload, &metaInfo); err != nil {
-		return err
-	}
-
 	m.onGetMetaOnce.Do(func() {
-		m.MetaInfo = message.MetaMessage{
-			Meta:    metaInfo,
-			RawData: payload,
-		}
+		m.MetaRaw = payload
 		close(m.metaGotChan)
 	})
 

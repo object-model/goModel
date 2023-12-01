@@ -1,0 +1,263 @@
+{
+  "name": "car/tpqs",
+  "description": "发射车调平起竖服务",
+  "state": [
+    {
+      "name": "tpqsInfo",
+      "description": "调平起竖状态信息",
+      "type": "struct",
+      "fields": [
+        {
+          "name": "qsState",
+          "description": "起竖状态",
+          "type": "string",
+          "range": {
+            "option": [
+              {
+                "value": "erecting",
+                "description": "起竖中"
+              },
+
+              {
+                "value": "hping",
+                "description": "回平中"
+              },
+
+              {
+                "value": "uping",
+                "description": "升车中"
+              },
+
+              {
+                "value": "downing",
+                "description": "将车中"
+              }
+            ]
+          }
+        },
+
+        {
+          "name": "hpSwitch",
+          "description": "回平到位开关是否有效",
+          "type": "bool"
+        },
+
+        {
+          "name": "qsAngle",
+          "description": "起竖角度",
+          "type": "float",
+          "range": {
+            "min": 0,
+            "max": 200
+          },
+          "unit": "度"
+        },
+
+        {
+          "name": "errors",
+          "description": "起竖系统故障信息",
+          "type": "slice",
+          "element": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "code",
+                "description": "故障码值",
+                "type": "uint"
+              },
+
+              {
+                "name": "msg",
+                "description":"故障提示信息",
+                "type": "string"
+              }
+            ]
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "powerInfo",
+      "description": "8路配电通道信息",
+      "type": "array",
+      "element": {
+        "type": "struct",
+        "fields": [
+          {
+            "name": "isOn",
+            "description": "配电是否接通",
+            "type": "bool"
+          },
+
+          {
+            "name": "outCur",
+            "description": "配电输出电流",
+            "type": "float",
+            "range": {
+              "max": 100000,
+              "min": -100000
+            },
+            "unit": "A"
+          }
+        ]
+      },
+      "length": 8
+    }
+  ],
+  "event": [
+    {
+      "name": "qsMotorOverCur",
+      "description": "起竖电机过流告警事件",
+      "args": []
+    },
+
+    {
+      "name": "qsAction",
+      "description": "起竖动作中事件",
+      "args": [
+        {
+          "name": "motors",
+          "description": "4路起竖电机状态",
+          "type": "array",
+          "length": 4,
+          "element": {
+            "type": "struct",
+            "fields": [
+              {
+                "name": "rov",
+                "description": "电机转速",
+                "type": "int",
+                "unit": "rpm"
+              },
+
+              {
+                "name": "cur",
+                "description": "电机电流",
+                "type": "int",
+                "unit": "mA"
+              },
+
+              {
+                "name": "temp",
+                "description": "电机温度",
+                "type": "int",
+                "unit": "℃"
+              }
+            ]
+          }
+        },
+
+        {
+          "name": "qsAngle",
+          "description": "起竖角度",
+          "type": "float",
+          "unit": "°"
+        }
+      ]
+    }
+  ],
+  "method": [
+    {
+      "name": "QS",
+      "description": "起竖控制",
+      "args": [
+        {
+          "name": "angle",
+          "description": "期望的起竖角度",
+          "type": "float",
+          "range": {
+            "max": 91,
+            "min": 0,
+            "default": 90
+          },
+          "unit": "°"
+        },
+
+        {
+          "name": "speed",
+          "description": "起竖速度选择",
+          "type": "string",
+          "range": {
+            "option": [
+              {
+                "value": "slow",
+                "description": "慢速"
+              },
+
+              {
+                "value": "middle",
+                "description": "中速"
+              },
+
+              {
+                "value": "fast",
+                "description": "快速"
+              },
+
+              {
+                "value": "superFast",
+                "description": "特快速"
+              }
+            ],
+            "default": "superFast"
+          }
+        }
+      ],
+
+      "response": [
+        {
+          "name": "res",
+          "description": "执行是否成功",
+          "type": "bool"
+        },
+
+        {
+          "name": "msg",
+          "description": "执行结果的描述信息,执行失败时描述失败原因",
+          "type": "string"
+        },
+
+        {
+          "name": "time",
+          "description": "执行时间",
+          "type": "uint",
+          "range": {
+            "min": 0,
+            "max": 100000
+          },
+          "unit": "ms"
+        },
+
+        {
+          "name": "code",
+          "description": "执行结果码",
+          "type": "int",
+          "range": {
+            "option": [
+              {
+                "value": 0,
+                "description": "执行成功"
+              },
+
+              {
+                "value": 1,
+                "description": "起竖传感器离线"
+              },
+
+              {
+                "value": 2,
+                "description": "驱动器未上电"
+              },
+
+              {
+                "value": 3,
+                "description": "未处于开盖状态"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

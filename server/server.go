@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"proxy/message"
+	"proxy/meta"
 	"time"
 )
 
@@ -296,7 +297,7 @@ func onQueryAllModel(connections map[string]connection, resChan chan []modelItem
 			Addr:      conn.model.RemoteAddr().String(),
 			SubStates: states,
 			SubEvents: events,
-			MetaInfo:  conn.MetaInfo.RawData,
+			MetaInfo:  conn.MetaRaw,
 		})
 	}
 	resChan <- items
@@ -322,7 +323,7 @@ func onQueryModel(connections map[string]connection, queryModel queryModelReq) {
 			info.SubEvents = append(info.SubEvents, state)
 		}
 		info.Addr = conn.RemoteAddr().String()
-		info.MetaInfo = conn.MetaInfo.RawData
+		info.MetaInfo = conn.MetaRaw
 	}
 	queryModel.ResChan <- queryModelRes{
 		ModelInfo: info,
@@ -388,10 +389,12 @@ func (s *Server) addModelConnection(conn ModelConn) {
 	}
 
 	// 元信息校验不通过则不添加, 并退出
-	if err := ans.MetaInfo.Check(); err != nil {
+	if GotMeta, err := meta.Parse(ans.MetaRaw); err != nil {
 		s.pushMetaCheckErrorEvent(err, ans)
 		_ = ans.Close()
 		return
+	} else {
+		ans.MetaInfo = GotMeta
 	}
 
 	// 添加链路

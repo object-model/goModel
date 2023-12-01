@@ -411,6 +411,12 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 更新日志
 
+## 20231201
+
+1. 将物模型元信息的解析改成和C++版本的物模型框架一致的方式
+2. 完成元信息解析的单元测试
+3. 代理检查物模型改用新的接口
+
 ## 20231126
 
 1. 确保在代理添加模型后收到的报文能在缓存的报文处理完毕后处理，或者在缓存的报文处理出错后直接退出
