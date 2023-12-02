@@ -817,10 +817,74 @@ func TestParseError(t *testing.T) {
 			"method[1]: repeat method name: \"QS\"",
 			"方法名称重复",
 		},
+
+		{
+			`{"name": " / ", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			"root: name: empty model name after normalize",
+			"空的物模型名称",
+		},
+
+		{
+			`{"name": " / {   }", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			"root: name: empty template name",
+			"空的模板名称",
+		},
+
+		{
+			`{"name": "car / {  { a }", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			"root: name: template \"{ a\": contains extra '{'",
+			"模板名包含多余的{",
+		},
+
+		{
+			`{"name": "car / {  a} }", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			"root: name: template \"a}\": contains extra '}'",
+			"模板名包含多余的}",
+		},
+
+		{
+			`{"name": "car / {a} / {  a  }", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			"root: name: repeat template: \"a\"",
+			"重复的模板名称",
+		},
 	}
 
 	for _, test := range testCases {
-		_, err := Parse([]byte(test.data))
+		_, err := Parse([]byte(test.data), nil)
+		assert.NotNil(t, err)
+		assert.Equal(t, test.wantErr, err.Error(), test.desc)
+	}
+}
+
+func TestParseWithTemplateError(t *testing.T) {
+	testCases := []struct {
+		data    string
+		param   TemplateParam
+		wantErr string
+		desc    string
+	}{
+		{
+			`{"name": "{group}/car / {id}/ tpqs", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			TemplateParam{
+				" id ": " #1 ",
+			},
+			"template \"group\": missing",
+			"模板参数缺失",
+		},
+
+		{
+			`{"name": "{group}/car / {id}/ tpqs", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			TemplateParam{
+				"group": " A ",
+				" id ":  "  ",
+			},
+			"template \"id\": value is empty",
+			"模板参为空",
+		},
+	}
+
+	for _, test := range testCases {
+		_, err := Parse([]byte(test.data), test.param)
 		assert.NotNil(t, err)
 		assert.Equal(t, test.wantErr, err.Error(), test.desc)
 	}
@@ -829,7 +893,7 @@ func TestParseError(t *testing.T) {
 func TestParseOk(t *testing.T) {
 
 	meta := Meta{
-		Name:        "car/tpqs",
+		Name:        "A/car/#1/tpqs",
 		Description: "发射车调平起竖服务",
 		State: []ParamMeta{
 			{
@@ -1089,10 +1153,25 @@ func TestParseOk(t *testing.T) {
 				},
 			},
 		},
+
+		nameTokens: []string{
+			"A",
+			"car",
+			"#1",
+			"tpqs",
+		},
+
+		nameTemplates: map[string]int{
+			"group": 0,
+			"id":    2,
+		},
 	}
 
 	json, _ := ioutil.ReadFile("./tpqs.json")
-	m, err := Parse(json)
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
 	assert.Nil(t, err)
 	assert.EqualValues(t, meta, m)
 

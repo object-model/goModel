@@ -415,6 +415,8 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 1. 元信息的解析支持去除多余的空格以增强适用性
 2. 测试用例增加包含多余空格的情况
+3. 完成元信息加载解析支持模板参数的功能
+4. 完成和元信息模板参数相关的单元测试
 
 ## 20231201
 

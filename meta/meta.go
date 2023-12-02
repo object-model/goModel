@@ -60,7 +60,12 @@ type Meta struct {
 	State       []ParamMeta  `json:"state"`       // 状态元信息
 	Event       []EventMeta  `json:"event"`       // 事件元信息
 	Method      []MethodMeta `json:"method"`      // 方法元信息
+
+	nameTokens    []string       // 物模型名称以/分割后的有效token
+	nameTemplates map[string]int // 模板参数名到nameTokens中的索引
 }
+
+type TemplateParam map[string]string
 
 func (m *Meta) AllStates() []string {
 	res := make([]string, 0, len(m.State))
@@ -84,7 +89,63 @@ func (m *Meta) AllEvents() []string {
 	return res
 }
 
-func Parse(rawData []byte) (Meta, error) {
+func (m *Meta) parseTemplate(name string) {
+	// 1.先以/分割
+	tokens := strings.Split(name, "/")
+
+	// 2.去除每个token前后的空格
+	for i, token := range tokens {
+		tokens[i] = strings.Trim(token, " \t\n\r\f\v")
+	}
+
+	// 3.过滤空的token
+	m.nameTokens = make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token != "" {
+			m.nameTokens = append(m.nameTokens, token)
+		}
+	}
+
+	// 4.查找模板参数
+	m.nameTemplates = make(map[string]int)
+	for i, token := range m.nameTokens {
+		if strings.HasPrefix(token, "{") {
+			// 去除{和 } 并 去除空格后的 模板名称
+			templateName := strings.TrimSpace(token[1 : len(token)-1])
+
+			// 记录模板参数的下标位置
+			m.nameTemplates[templateName] = i
+
+			// 模板值暂时替换成空格
+			m.nameTokens[i] = ""
+		}
+	}
+}
+
+func (m *Meta) setTemplate(param TemplateParam) (err error) {
+	for name, index := range m.nameTemplates {
+		if val, seen := param[name]; !seen {
+			// 模板参数不存在则报错
+			err = fmt.Errorf("template %q: missing", name)
+		} else if val == "" {
+			// 设置的模板参数名不能为空
+			err = fmt.Errorf("template %q: value is empty", name)
+		} else {
+			m.nameTokens[index] = val
+		}
+	}
+
+	// NOTE: 保存失败要手动清空缓存的模板参数
+	// NOTE: 否则会导致元信息还是空，却存在模板参数
+	if err != nil {
+		m.nameTokens = nil
+		m.nameTemplates = nil
+	}
+
+	return
+}
+
+func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 	// 1. 读取
 	it := jsoniter.ParseBytes(jsoniter.ConfigDefault, rawData)
 	root := it.ReadAny()
@@ -92,19 +153,32 @@ func Parse(rawData []byte) (Meta, error) {
 		return Meta{}, fmt.Errorf("parse JSON failed")
 	}
 
-	// 2. 检查
+	// 2. 检查元信息是否正确
 	if err := check(root); err != nil {
 		return Meta{}, err
 	}
 
 	// 3. 解析
 	ans := Meta{
-		Name:        strings.Trim(root.Get("name").ToString(), " \t\n\r\f\v"),
-		Description: strings.Trim(root.Get("description").ToString(), " \t\n\r\f\v"),
+		Description: strings.TrimSpace(root.Get("description").ToString()),
 		State:       make([]ParamMeta, 0, root.Get("state").Size()),
 		Event:       make([]EventMeta, 0, root.Get("event").Size()),
 		Method:      make([]MethodMeta, 0, root.Get("method").Size()),
 	}
+
+	// 4.解析模板参数
+	ans.parseTemplate(root.Get("name").ToString())
+
+	// 3.规范化模板参数
+	templateParam = trimTemplate(templateParam)
+
+	// 5.保存模板参数
+	if err := ans.setTemplate(templateParam); err != nil {
+		return Meta{}, err
+	}
+
+	// 6.更新模型名称
+	ans.Name = strings.Join(ans.nameTokens, "/")
 
 	for i := 0; i < root.Get("state").Size(); i++ {
 		ans.State = append(ans.State, createParamMeta(root.Get("state").Get(i)))
@@ -130,6 +204,11 @@ func check(root jsoniter.Any) error {
 	// 检查name和description字段
 	if err := checkNameDesc(root); err != nil {
 		return fmt.Errorf("root: %s", err)
+	}
+
+	// 检查模型名称是否符合规范
+	if err := checkModelName(root.Get("name").ToString()); err != nil {
+		return fmt.Errorf("root: name: %s", err)
 	}
 
 	// 必须包含state字段
@@ -990,20 +1069,87 @@ func checkUintRange(rangeObj jsoniter.Any) error {
 	return nil
 }
 
+func checkModelName(name string) error {
+	// 1.先以/分割
+	tokens := strings.Split(name, "/")
+
+	// 2.去除每个token前后空格
+	for i, token := range tokens {
+		tokens[i] = strings.Trim(token, " \t\n\r\f\v")
+	}
+
+	// 3.过滤空的token
+	trimmedToken := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token != "" {
+			trimmedToken = append(trimmedToken, token)
+		}
+	}
+
+	// 4.规范化后tokens不能为空
+	if len(trimmedToken) == 0 {
+		return fmt.Errorf("empty model name after normalize")
+	}
+
+	// 5.检查模板
+	visited := make(map[string]struct{})
+	for _, token := range trimmedToken {
+		// 没有以{开头, 但以}结尾
+		if !strings.HasPrefix(token, "{") && strings.HasSuffix(token, "}") {
+			return fmt.Errorf("template %q: missing '{'", token)
+		}
+
+		// 以{开头, 但没有以}结尾
+		if strings.HasPrefix(token, "{") && !strings.HasSuffix(token, "}") {
+			return fmt.Errorf("template %q: missing '}'", token)
+		}
+
+		// {...} 形式的模板
+		if strings.HasPrefix(token, "{") && strings.HasSuffix(token, "}") {
+			// 去除{和 } 并 去除空格后的 模板名称
+			templateName := strings.Trim(token[1:len(token)-1], " \t\n\r\f\v")
+
+			// 模板名称不允许为空
+			if templateName == "" {
+				return fmt.Errorf("empty template name")
+			}
+
+			// 不允许再由多余的{
+			if strings.Contains(templateName, "{") {
+				return fmt.Errorf("template %q: contains extra '{'", templateName)
+			}
+
+			// 不允许再由多余的}
+			if strings.Contains(templateName, "}") {
+				return fmt.Errorf("template %q: contains extra '}'", templateName)
+			}
+
+			// 模板名称不能重复
+			if _, seen := visited[templateName]; seen {
+				return fmt.Errorf("repeat template: %q", templateName)
+			} else {
+				visited[templateName] = struct{}{}
+			}
+		}
+	}
+
+	return nil
+}
+
 func createParamMeta(param jsoniter.Any) ParamMeta {
 	ans := ParamMeta{
-		Type: strings.Trim(param.Get("type").ToString(), " \t\n\r\f\v"),
+		Type: strings.TrimSpace(param.Get("type").ToString()),
 	}
 
 	name := param.Get("name")
 	if name.LastError() == nil {
-		nameStr := strings.Trim(name.ToString(), " \t\n\r\f\v")
+		nameStr := strings.TrimSpace(name.ToString())
 		ans.Name = &nameStr
 	}
 
 	description := param.Get("description")
 	if description.LastError() == nil {
-		descriptionStr := strings.Trim(description.ToString(), " \t\n\r\f\v")
+		descriptionStr := strings.TrimSpace(description.ToString())
 		ans.Description = &descriptionStr
 	}
 
@@ -1029,7 +1175,7 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 
 	unit := param.Get("unit")
 	if unit.LastError() == nil {
-		unitVal := strings.Trim(unit.ToString(), " \t\n\r\f\v")
+		unitVal := strings.TrimSpace(unit.ToString())
 		ans.Unit = &unitVal
 	}
 
@@ -1050,7 +1196,7 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 			for i := 0; i < optionCfg.Size(); i++ {
 				ans.Range.Option = append(ans.Range.Option, OptionInfo{
 					Value:       getVal(ans.Type, optionCfg.Get(i).Get("value")),
-					Description: strings.Trim(optionCfg.Get(i).Get("description").ToString(), " \t\n\r\f\v"),
+					Description: strings.TrimSpace(optionCfg.Get(i).Get("description").ToString()),
 				})
 			}
 		}
@@ -1064,8 +1210,8 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 
 func createEventMeta(event jsoniter.Any) EventMeta {
 	ans := EventMeta{
-		Name:        strings.Trim(event.Get("name").ToString(), " \t\n\r\f\v"),
-		Description: strings.Trim(event.Get("description").ToString(), " \t\n\r\f\v"),
+		Name:        strings.TrimSpace(event.Get("name").ToString()),
+		Description: strings.TrimSpace(event.Get("description").ToString()),
 		Args:        make([]ParamMeta, 0, event.Get("args").Size()),
 	}
 
@@ -1078,8 +1224,8 @@ func createEventMeta(event jsoniter.Any) EventMeta {
 
 func createMethodMeta(method jsoniter.Any) MethodMeta {
 	ans := MethodMeta{
-		Name:        strings.Trim(method.Get("name").ToString(), " \t\n\r\f\v"),
-		Description: strings.Trim(method.Get("description").ToString(), " \t\n\r\f\v"),
+		Name:        strings.TrimSpace(method.Get("name").ToString()),
+		Description: strings.TrimSpace(method.Get("description").ToString()),
 		Args:        make([]ParamMeta, 0, method.Get("args").Size()),
 		Response:    make([]ParamMeta, 0, method.Get("response").Size()),
 	}
@@ -1104,8 +1250,16 @@ func getVal(Type string, any jsoniter.Any) interface{} {
 	case "float":
 		return any.ToFloat64()
 	case "string":
-		return strings.Trim(any.ToString(), " \t\n\r\f\v")
+		return strings.TrimSpace(any.ToString())
 	default:
 		return nil
 	}
+}
+
+func trimTemplate(param TemplateParam) TemplateParam {
+	ans := make(map[string]string)
+	for name, val := range param {
+		ans[strings.TrimSpace(name)] = strings.TrimSpace(val)
+	}
+	return ans
 }
