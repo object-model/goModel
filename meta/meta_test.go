@@ -57,6 +57,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "  "}`,
+			"root: name is empty",
+			"name字段为空字符串",
+		},
+
+		{
 			`{"name": "test"}`,
 			"root: description NOT exist",
 			"description字段不存在",
@@ -144,6 +150,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "状态1", "type": []}], "event": [], "method": []}`,
 			"state[0]: type is NOT string",
 			"状态对象type字段不是字符串",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "状态1", "type": "    "}], "event": [], "method": []}`,
+			"state[0]: type is empty",
+			"状态对象type字段是空字符串",
 		},
 
 		{
@@ -249,6 +261,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "vol", "description": "状态1", "type": "float", "unit": "   "}], "event": [], "method": []}`,
+			"state[0]: unit is empty",
+			"unit是空字符串",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "vol", "description": "状态1", "type": "float", "range": 123}], "event": [], "method": []}`,
 			"state[0]: range: NOT object",
 			"range类型不正确",
@@ -327,6 +345,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "  "}, {}]}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: value is empty",
+			"string类型中的range中的option的选项中的value为空字符串",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "fast"}, {}]}}], "event": [], "method": []}`,
 			"state[0]: range: option[0]: description NOT exist",
 			"string类型中的range中的option的选项缺少description",
@@ -336,6 +360,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "fast", "description": 123}, {}]}}], "event": [], "method": []}`,
 			"state[0]: range: option[0]: description is NOT string",
 			"string类型中的range中的option的选项中的description不是字符串",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "fast", "description": "   "}, {}]}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: description is empty",
+			"string类型中的range中的option的选项中的description为空字符串",
 		},
 
 		{
@@ -354,6 +384,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "fast", "description": "快"}, {"value": "middle", "description": "中"}], "default": 123}}], "event": [], "method": []}`,
 			"state[0]: range: default: NOT string",
 			"string类型中的range中的default不是字符串",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": [{"value": "fast", "description": "快"}, {"value": "middle", "description": "中"}], "default": "  "}}], "event": [], "method": []}`,
+			"state[0]: range: default is empty",
+			"string类型中的range中的default为空字符串",
 		},
 
 		{
@@ -456,6 +492,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [{"value": 1, "description": 3.14}]}}], "event": [], "method": []}`,
 			"state[0]: range: option[0]: description is NOT string",
 			"int类型中的range中的option[0]的description不是string",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [{"value": 1, "description": ""}]}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: description is empty",
+			"int类型中的range中的option[0]的description为空字符串",
 		},
 
 		{
@@ -669,13 +711,13 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
-			`{"name": "test", "description": "测试物模型", "state": [], "event": [{"name": "ok", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "time", "description": "时间", "type": "uint"}]}], "method": []}`,
+			`{"name": "test", "description": "测试物模型", "state": [], "event": [{"name": "ok", "description": "完成", "args": [{"name": "  time", "description": "时间", "type": "uint"}, {"name": "time  ", "description": "时间", "type": "uint"}]}], "method": []}`,
 			"event[0]: args[1]: repeat arg name: \"time\"",
 			"事件元信息event[0]的args[1]的名称重复",
 		},
 
 		{
-			`{"name": "test", "description": "测试物模型", "state": [], "event": [{"name": "ok", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}, {"name": "ok", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}], "method": []}`,
+			`{"name": "test", "description": "测试物模型", "state": [], "event": [{"name": "  ok", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}, {"name": "ok  ", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}], "method": []}`,
 			"event[1]: repeat event name: \"ok\"",
 			"事件元信息event[1]的事件名重复",
 		},
@@ -765,13 +807,13 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
-			`{"name": "test", "description": "测试物模型", "state": [], "event": [], "method": [{"name": "QS", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}, {"name": "res", "description": "结果", "type": "bool"}]}]}`,
+			`{"name": "test", "description": "测试物模型", "state": [], "event": [], "method": [{"name": "QS", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}, {"name": "  res   ", "description": "结果", "type": "bool"}]}]}`,
 			"method[0]: response[1]: repeat resp name: \"res\"",
 			"方法元信息的response[1]的名称重复",
 		},
 
 		{
-			`{"name": "test", "description": "测试物模型", "state": [], "event": [], "method": [{"name": "QS", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}]}, {"name": "QS", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}]}]}`,
+			`{"name": "test", "description": "测试物模型", "state": [], "event": [], "method": [{"name": " QS", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}]}, {"name": "QS   ", "description": "起竖", "args": [{"name": "speed", "description": "速度", "type": "string"}], "response": [{"name": "res", "description": "结果", "type": "bool"}]}]}`,
 			"method[1]: repeat method name: \"QS\"",
 			"方法名称重复",
 		},

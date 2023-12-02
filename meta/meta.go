@@ -55,11 +55,11 @@ type MethodMeta struct {
 }
 
 type Meta struct {
-	Name        string       `json:"name"` // 物模型名称
-	Description string       `json:"description"`
-	State       []ParamMeta  `json:"state"`
-	Event       []EventMeta  `json:"event"`
-	Method      []MethodMeta `json:"method"`
+	Name        string       `json:"name"`        // 物模型名称
+	Description string       `json:"description"` // 物模型描述
+	State       []ParamMeta  `json:"state"`       // 状态元信息
+	Event       []EventMeta  `json:"event"`       // 事件元信息
+	Method      []MethodMeta `json:"method"`      // 方法元信息
 }
 
 func (m *Meta) AllStates() []string {
@@ -99,8 +99,8 @@ func Parse(rawData []byte) (Meta, error) {
 
 	// 3. 解析
 	ans := Meta{
-		Name:        root.Get("name").ToString(),
-		Description: root.Get("description").ToString(),
+		Name:        strings.Trim(root.Get("name").ToString(), " \t\n\r\f\v"),
+		Description: strings.Trim(root.Get("description").ToString(), " \t\n\r\f\v"),
 		State:       make([]ParamMeta, 0, root.Get("state").Size()),
 		Event:       make([]EventMeta, 0, root.Get("event").Size()),
 		Method:      make([]MethodMeta, 0, root.Get("method").Size()),
@@ -239,7 +239,7 @@ func checkEvent(event jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保事件参数名称不重复
-		argName := args.Get(i).Get("name").ToString()
+		argName := strings.Trim(args.Get(i).Get("name").ToString(), " \t\n\r\f\v")
 		if _, seen := argsName[argName]; seen {
 			return fmt.Errorf("args[%d]: repeat arg name: %q", i, argName)
 		} else {
@@ -248,7 +248,7 @@ func checkEvent(event jsoniter.Any, visited map[string]struct{}) error {
 	}
 
 	// 确保事件名不能重复
-	eventName := event.Get("name").ToString()
+	eventName := strings.Trim(event.Get("name").ToString(), " \t\n\r\f\v")
 	if _, seen := visited[eventName]; seen {
 		return fmt.Errorf("repeat event name: %q", eventName)
 	} else {
@@ -289,7 +289,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保方法参数名称不重复
-		argName := args.Get(i).Get("name").ToString()
+		argName := strings.Trim(args.Get(i).Get("name").ToString(), " \t\n\r\f\v")
 		if _, seen := argsName[argName]; seen {
 			return fmt.Errorf("args[%d]: repeat arg name: %q", i, argName)
 		} else {
@@ -317,7 +317,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保方法返回值名称不重复
-		respName := response.Get(i).Get("name").ToString()
+		respName := strings.Trim(response.Get(i).Get("name").ToString(), " \t\n\r\f\v")
 		if _, seen := respNameSet[respName]; seen {
 			return fmt.Errorf("response[%d]: repeat resp name: %q", i, respName)
 		} else {
@@ -326,7 +326,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 	}
 
 	// 确保事件名不能重复
-	methodName := method.Get("name").ToString()
+	methodName := strings.Trim(method.Get("name").ToString(), " \t\n\r\f\v")
 	if _, seen := visited[methodName]; seen {
 		return fmt.Errorf("repeat method name: %q", methodName)
 	} else {
@@ -348,6 +348,11 @@ func checkNameDesc(obj jsoniter.Any) error {
 		return fmt.Errorf("name is NOT string")
 	}
 
+	// name字段不能为空字符串
+	if strings.Trim(name.ToString(), " \t\n\r\f\v") == "" {
+		return fmt.Errorf("name is empty")
+	}
+
 	// 必须包含description字段
 	description := obj.Get("description")
 	if description.LastError() != nil {
@@ -357,6 +362,11 @@ func checkNameDesc(obj jsoniter.Any) error {
 	// description字段必须是字符串类型
 	if description.ValueType() != jsoniter.StringValue {
 		return fmt.Errorf("description is NOT string")
+	}
+
+	// description字段不能为空字符串
+	if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+		return fmt.Errorf("description is empty")
 	}
 
 	return nil
@@ -386,8 +396,13 @@ func checkParamInfo(obj jsoniter.Any, isElement bool) error {
 		return fmt.Errorf("type is NOT string")
 	}
 
+	// type字段值不能为空
+	typeStr := strings.Trim(Type.ToString(), " \t\n\r\f\v")
+	if typeStr == "" {
+		return fmt.Errorf("type is empty")
+	}
+
 	// type字段的值必须有效
-	typeStr := Type.ToString()
 	if _, seen := validType[typeStr]; !seen {
 		return fmt.Errorf("invalid type: %q", typeStr)
 	}
@@ -468,9 +483,16 @@ func checkParamInfo(obj jsoniter.Any, isElement bool) error {
 		}
 	case "int", "uint", "float":
 		unit := obj.Get("unit")
-		// 在uint字段存在的情况下，必须是字符串类型
-		if unit.LastError() == nil && unit.ValueType() != jsoniter.StringValue {
-			return fmt.Errorf("unit is NOT string")
+
+		if unit.LastError() == nil {
+			// 在unit字段存在的情况下，必须是字符串类型
+			if unit.ValueType() != jsoniter.StringValue {
+				return fmt.Errorf("unit is NOT string")
+			}
+			// unit不能时空字符串
+			if strings.Trim(unit.ToString(), " \t\n\r\f\v") == "" {
+				return fmt.Errorf("unit is empty")
+			}
 		}
 	}
 
@@ -543,8 +565,13 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 			return fmt.Errorf("range: option[%d]: value is NOT string", i)
 		}
 
+		// 每个option选项的value值不能为空
+		valueStr := strings.Trim(optionValue.ToString(), " \t\r\n\f\v")
+		if valueStr == "" {
+			return fmt.Errorf("range: option[%d]: value is empty", i)
+		}
+
 		// 每个option选项的value值不能重复
-		valueStr := optionValue.ToString()
 		if _, seen := valueSet[valueStr]; seen {
 			return fmt.Errorf("range: option[%d]: repeat value: %q", i, valueStr)
 		} else {
@@ -561,6 +588,11 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 		if description.ValueType() != jsoniter.StringValue {
 			return fmt.Errorf("range: option[%d]: description is NOT string", i)
 		}
+
+		// 每个option选项包含的description不能为空字符串
+		if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+			return fmt.Errorf("range: option[%d]: description is empty", i)
+		}
 	}
 
 	// 如果有default字段，检查默认值是否合理
@@ -570,7 +602,13 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 			return fmt.Errorf("range: default: NOT string")
 		}
 
-		defaultVal := Default.ToString()
+		defaultVal := strings.Trim(Default.ToString(), " \t\n\r\f\v")
+
+		// default不能为空字符串
+		if defaultVal == "" {
+			return fmt.Errorf("range: default is empty")
+		}
+
 		if _, seen := valueSet[defaultVal]; !seen {
 			return fmt.Errorf("range: default: %q NOT in option", defaultVal)
 		}
@@ -705,6 +743,11 @@ func checkIntRange(rangeObj jsoniter.Any) error {
 			// 每个option选项包含的description必须是string类型
 			if description.ValueType() != jsoniter.StringValue {
 				return fmt.Errorf("range: option[%d]: description is NOT string", i)
+			}
+
+			// 每个option选项包含的description不能为空字符串
+			if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+				return fmt.Errorf("range: option[%d]: description is empty", i)
 			}
 		}
 
@@ -852,6 +895,11 @@ func checkUintRange(rangeObj jsoniter.Any) error {
 			if description.ValueType() != jsoniter.StringValue {
 				return fmt.Errorf("range: option[%d]: description is NOT string", i)
 			}
+
+			// 每个option选项包含的description不能为空字符串
+			if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+				return fmt.Errorf("range: option[%d]: description is empty", i)
+			}
 		}
 
 		// 如果有default字段，检查默认值是否合理
@@ -944,18 +992,18 @@ func checkUintRange(rangeObj jsoniter.Any) error {
 
 func createParamMeta(param jsoniter.Any) ParamMeta {
 	ans := ParamMeta{
-		Type: param.Get("type").ToString(),
+		Type: strings.Trim(param.Get("type").ToString(), " \t\n\r\f\v"),
 	}
 
 	name := param.Get("name")
 	if name.LastError() == nil {
-		nameStr := name.ToString()
+		nameStr := strings.Trim(name.ToString(), " \t\n\r\f\v")
 		ans.Name = &nameStr
 	}
 
 	description := param.Get("description")
 	if description.LastError() == nil {
-		descriptionStr := description.ToString()
+		descriptionStr := strings.Trim(description.ToString(), " \t\n\r\f\v")
 		ans.Description = &descriptionStr
 	}
 
@@ -981,7 +1029,7 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 
 	unit := param.Get("unit")
 	if unit.LastError() == nil {
-		unitVal := unit.ToString()
+		unitVal := strings.Trim(unit.ToString(), " \t\n\r\f\v")
 		ans.Unit = &unitVal
 	}
 
@@ -1002,7 +1050,7 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 			for i := 0; i < optionCfg.Size(); i++ {
 				ans.Range.Option = append(ans.Range.Option, OptionInfo{
 					Value:       getVal(ans.Type, optionCfg.Get(i).Get("value")),
-					Description: optionCfg.Get(i).Get("description").ToString(),
+					Description: strings.Trim(optionCfg.Get(i).Get("description").ToString(), " \t\n\r\f\v"),
 				})
 			}
 		}
@@ -1016,8 +1064,8 @@ func createParamMeta(param jsoniter.Any) ParamMeta {
 
 func createEventMeta(event jsoniter.Any) EventMeta {
 	ans := EventMeta{
-		Name:        event.Get("name").ToString(),
-		Description: event.Get("description").ToString(),
+		Name:        strings.Trim(event.Get("name").ToString(), " \t\n\r\f\v"),
+		Description: strings.Trim(event.Get("description").ToString(), " \t\n\r\f\v"),
 		Args:        make([]ParamMeta, 0, event.Get("args").Size()),
 	}
 
@@ -1030,8 +1078,8 @@ func createEventMeta(event jsoniter.Any) EventMeta {
 
 func createMethodMeta(method jsoniter.Any) MethodMeta {
 	ans := MethodMeta{
-		Name:        method.Get("name").ToString(),
-		Description: method.Get("description").ToString(),
+		Name:        strings.Trim(method.Get("name").ToString(), " \t\n\r\f\v"),
+		Description: strings.Trim(method.Get("description").ToString(), " \t\n\r\f\v"),
 		Args:        make([]ParamMeta, 0, method.Get("args").Size()),
 		Response:    make([]ParamMeta, 0, method.Get("response").Size()),
 	}
@@ -1056,7 +1104,7 @@ func getVal(Type string, any jsoniter.Any) interface{} {
 	case "float":
 		return any.ToFloat64()
 	case "string":
-		return any.ToString()
+		return strings.Trim(any.ToString(), " \t\n\r\f\v")
 	default:
 		return nil
 	}

@@ -1,5 +1,5 @@
 {
-  "name": "car/tpqs",
+  "name": "\t  car/tpqs  \n\r\f",
   "description": "发射车调平起竖服务",
   "state": [
     {
@@ -10,7 +10,7 @@
         {
           "name": "qsState",
           "description": "起竖状态",
-          "type": "string",
+          "type": "  string",
           "range": {
             "option": [
               {
@@ -19,7 +19,7 @@
               },
 
               {
-                "value": "hping",
+                "value": "  hping  ",
                 "description": "回平中"
               },
 
@@ -45,12 +45,12 @@
         {
           "name": "qsAngle",
           "description": "起竖角度",
-          "type": "float",
+          "type": " float ",
           "range": {
             "min": 0,
             "max": 200
           },
-          "unit": "度"
+          "unit": "  度    "
         },
 
         {
@@ -108,7 +108,7 @@
   "event": [
     {
       "name": "qsMotorOverCur",
-      "description": "起竖电机过流告警事件",
+      "description": "  起竖电机过流告警事件 \f\t",
       "args": []
     },
 
@@ -196,11 +196,11 @@
               },
 
               {
-                "value": "superFast",
-                "description": "特快速"
+                "value": " superFast",
+                "description": "  特快速  "
               }
             ],
-            "default": "superFast"
+            "default": "\r\nsuperFast\t\t"
           }
         }
       ],
@@ -226,7 +226,7 @@
             "min": 0,
             "max": 100000
           },
-          "unit": "ms"
+          "unit": "  ms \t"
         },
 
         {
@@ -237,7 +237,7 @@
             "option": [
               {
                 "value": 0,
-                "description": "执行成功"
+                "description": "\n\r执行成功\f  \t"
               },
 
               {
@@ -252,7 +252,7 @@
 
               {
                 "value": 3,
-                "description": "未处于开盖状态"
+                "description": " 未处于开盖状态"
               }
             ]
           }

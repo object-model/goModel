@@ -411,6 +411,11 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 更新日志
 
+## 20231202
+
+1. 元信息的解析支持去除多余的空格以增强适用性
+2. 测试用例增加包含多余空格的情况
+
 ## 20231201
 
 1. 将物模型元信息的解析改成和C++版本的物模型框架一致的方式
