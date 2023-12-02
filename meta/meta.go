@@ -318,7 +318,7 @@ func checkEvent(event jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保事件参数名称不重复
-		argName := strings.Trim(args.Get(i).Get("name").ToString(), " \t\n\r\f\v")
+		argName := strings.TrimSpace(args.Get(i).Get("name").ToString())
 		if _, seen := argsName[argName]; seen {
 			return fmt.Errorf("args[%d]: repeat arg name: %q", i, argName)
 		} else {
@@ -327,7 +327,7 @@ func checkEvent(event jsoniter.Any, visited map[string]struct{}) error {
 	}
 
 	// 确保事件名不能重复
-	eventName := strings.Trim(event.Get("name").ToString(), " \t\n\r\f\v")
+	eventName := strings.TrimSpace(event.Get("name").ToString())
 	if _, seen := visited[eventName]; seen {
 		return fmt.Errorf("repeat event name: %q", eventName)
 	} else {
@@ -368,7 +368,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保方法参数名称不重复
-		argName := strings.Trim(args.Get(i).Get("name").ToString(), " \t\n\r\f\v")
+		argName := strings.TrimSpace(args.Get(i).Get("name").ToString())
 		if _, seen := argsName[argName]; seen {
 			return fmt.Errorf("args[%d]: repeat arg name: %q", i, argName)
 		} else {
@@ -396,7 +396,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 		}
 
 		// 确保方法返回值名称不重复
-		respName := strings.Trim(response.Get(i).Get("name").ToString(), " \t\n\r\f\v")
+		respName := strings.TrimSpace(response.Get(i).Get("name").ToString())
 		if _, seen := respNameSet[respName]; seen {
 			return fmt.Errorf("response[%d]: repeat resp name: %q", i, respName)
 		} else {
@@ -405,7 +405,7 @@ func checkMethod(method jsoniter.Any, visited map[string]struct{}) error {
 	}
 
 	// 确保事件名不能重复
-	methodName := strings.Trim(method.Get("name").ToString(), " \t\n\r\f\v")
+	methodName := strings.TrimSpace(method.Get("name").ToString())
 	if _, seen := visited[methodName]; seen {
 		return fmt.Errorf("repeat method name: %q", methodName)
 	} else {
@@ -428,7 +428,7 @@ func checkNameDesc(obj jsoniter.Any) error {
 	}
 
 	// name字段不能为空字符串
-	if strings.Trim(name.ToString(), " \t\n\r\f\v") == "" {
+	if strings.TrimSpace(name.ToString()) == "" {
 		return fmt.Errorf("name is empty")
 	}
 
@@ -444,7 +444,7 @@ func checkNameDesc(obj jsoniter.Any) error {
 	}
 
 	// description字段不能为空字符串
-	if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+	if strings.TrimSpace(description.ToString()) == "" {
 		return fmt.Errorf("description is empty")
 	}
 
@@ -476,7 +476,7 @@ func checkParamInfo(obj jsoniter.Any, isElement bool) error {
 	}
 
 	// type字段值不能为空
-	typeStr := strings.Trim(Type.ToString(), " \t\n\r\f\v")
+	typeStr := strings.TrimSpace(Type.ToString())
 	if typeStr == "" {
 		return fmt.Errorf("type is empty")
 	}
@@ -569,7 +569,7 @@ func checkParamInfo(obj jsoniter.Any, isElement bool) error {
 				return fmt.Errorf("unit is NOT string")
 			}
 			// unit不能时空字符串
-			if strings.Trim(unit.ToString(), " \t\n\r\f\v") == "" {
+			if strings.TrimSpace(unit.ToString()) == "" {
 				return fmt.Errorf("unit is empty")
 			}
 		}
@@ -645,7 +645,7 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 		}
 
 		// 每个option选项的value值不能为空
-		valueStr := strings.Trim(optionValue.ToString(), " \t\r\n\f\v")
+		valueStr := strings.TrimSpace(optionValue.ToString())
 		if valueStr == "" {
 			return fmt.Errorf("range: option[%d]: value is empty", i)
 		}
@@ -669,7 +669,7 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 		}
 
 		// 每个option选项包含的description不能为空字符串
-		if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+		if strings.TrimSpace(description.ToString()) == "" {
 			return fmt.Errorf("range: option[%d]: description is empty", i)
 		}
 	}
@@ -681,7 +681,7 @@ func checkStringRange(rangeObj jsoniter.Any) error {
 			return fmt.Errorf("range: default: NOT string")
 		}
 
-		defaultVal := strings.Trim(Default.ToString(), " \t\n\r\f\v")
+		defaultVal := strings.TrimSpace(Default.ToString())
 
 		// default不能为空字符串
 		if defaultVal == "" {
@@ -825,7 +825,7 @@ func checkIntRange(rangeObj jsoniter.Any) error {
 			}
 
 			// 每个option选项包含的description不能为空字符串
-			if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+			if strings.TrimSpace(description.ToString()) == "" {
 				return fmt.Errorf("range: option[%d]: description is empty", i)
 			}
 		}
@@ -976,7 +976,7 @@ func checkUintRange(rangeObj jsoniter.Any) error {
 			}
 
 			// 每个option选项包含的description不能为空字符串
-			if strings.Trim(description.ToString(), " \t\n\r\f\v") == "" {
+			if strings.TrimSpace(description.ToString()) == "" {
 				return fmt.Errorf("range: option[%d]: description is empty", i)
 			}
 		}
