@@ -618,8 +618,6 @@ func checkRange(rangeObj jsoniter.Any, typeStr string) error {
 	default:
 		return fmt.Errorf("range: %q NOT support range", typeStr)
 	}
-
-	return nil
 }
 
 func checkStringRange(rangeObj jsoniter.Any) error {
@@ -859,7 +857,7 @@ func checkIntRange(rangeObj jsoniter.Any) error {
 
 			// 默认值必须在可选值列表中
 			if _, seen := valueSet[defaultVal]; !seen {
-				return fmt.Errorf("range: default: %q NOT in option", defaultVal)
+				return fmt.Errorf("range: default: %d NOT in option", defaultVal)
 			}
 		}
 	} else {
@@ -999,7 +997,7 @@ func checkUintRange(rangeObj jsoniter.Any) error {
 		// 如果有default字段，检查默认值是否合理
 		Default := rangeObj.Get("default")
 		if Default.LastError() == nil {
-			// 默认值必须是int
+			// 默认值必须是uint
 			if Default.ValueType() != jsoniter.NumberValue {
 				return fmt.Errorf("range: default: NOT number")
 			}

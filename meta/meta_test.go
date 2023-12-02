@@ -141,6 +141,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "   "}], "event": [], "method": []}`,
+			"state[0]: description is empty",
+			"状态对象description为空字符串",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "状态1"}], "event": [], "method": []}`,
 			"state[0]: type NOT exist",
 			"状态对象缺少type",
@@ -192,6 +198,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "状态1", "type": "array", "length":5}], "event": [], "method": []}`,
 			"state[0]: element NOT exist",
 			"array类型的状态没有element字段",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "state1", "description": "状态1", "type": "slice"}], "event": [], "method": []}`,
+			"state[0]: element NOT exist",
+			"slice类型的状态没有element字段",
 		},
 
 		{
@@ -279,6 +291,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "vol", "description": "状态1", "type": "float", "range": {}}], "event": [], "method": []}`,
+			"state[0]: range: NO min or max for float range",
+			"float类型中的range中的既没有min也没有max",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "vol", "description": "状态1", "type": "float", "range": {"min": "haha"}}], "event": [], "method": []}`,
 			"state[0]: range: min: NOT number",
 			"float类型中的range中的min类型错误",
@@ -324,6 +342,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": {}}}], "event": [], "method": []}`,
 			"state[0]: range: option: NOT array",
 			"string类型中的range中的option类型错误",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "speed", "description": "状态1", "type": "string", "range": {"option": []}}], "event": [], "method": []}`,
+			"state[0]: range: option: size less than 1",
+			"string类型中的range中的option包含0个选项",
 		},
 
 		{
@@ -429,6 +453,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"max": -10, "min": 10}}], "event": [], "method": []}`,
+			"state[0]: range: min is NOT less than max",
+			"int类型中的range中的max小于min",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"max": 10, "min": -10, "default": "3"}}], "event": [], "method": []}`,
 			"state[0]: range: default: NOT number",
 			"int类型中的range中的default类型错误",
@@ -462,6 +492,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [], "default": 11}}], "event": [], "method": []}`,
 			"state[0]: range: option: size less than 1",
 			"int类型中的range中的option包含0个选项",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [3], "default": 11}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: NOT object",
+			"int类型中的range中的option[0]不是对象",
 		},
 
 		{
@@ -515,7 +551,19 @@ func TestParseError(t *testing.T) {
 		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [{"value": 1, "description": "选项1"}, {"value": 2, "description": "选项2"}], "default": 3.14}}], "event": [], "method": []}`,
 			"state[0]: range: default: NOT int",
-			"int类型中的range中的default类型错误",
+			"int类型中的range中的default类型错误,不是int",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": [{"value": 1, "description": "选项1"}, {"value": 2, "description": "选项2"}], "default": 3}}], "event": [], "method": []}`,
+			"state[0]: range: default: 3 NOT in option",
+			"int类型中的range中的default不再可选项中",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {}}], "event": [], "method": []}`,
+			"state[0]: range: NO min or max for uint range",
+			"uint类型中的range中既没有min也没有max",
 		},
 
 		{
@@ -555,6 +603,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"max": 1, "min": 10}}], "event": [], "method": []}`,
+			"state[0]: range: min is NOT less than max",
+			"uint类型中的range中的min大于max",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"max": 10, "min": 1, "default": "3"}}], "event": [], "method": []}`,
 			"state[0]: range: default: NOT number",
 			"uint类型中的range中的default类型错误",
@@ -591,9 +645,15 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
-			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "int", "range": {"option": []}}], "event": [], "method": []}`,
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": []}}], "event": [], "method": []}`,
 			"state[0]: range: option: size less than 1",
 			"uint类型中的range中的option包含0个选项",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": [123]}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: NOT object",
+			"uint类型中的range中的option[0]不是对象",
 		},
 
 		{
@@ -633,9 +693,27 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": [{"value": 1, "description": "  "}]}}], "event": [], "method": []}`,
+			"state[0]: range: option[0]: description is empty",
+			"uint类型中的range中的option[0]的description是空字符串",
+		},
+
+		{
 			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": [{"value": 1, "description": "选项1"}, {"value": 1, "description": "选项2"} ]}}], "event": [], "method": []}`,
 			"state[0]: range: option[1]: repeat value: 1",
 			"uint类型中的range中的option[1]的选项重复",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": [{"value": 1, "description": "选项1"}, {"value": 2, "description": "选项2"} ], "default": "123"}}], "event": [], "method": []}`,
+			"state[0]: range: default: NOT number",
+			"uint类型中的range中的default不是数值类型",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [{"name": "temp", "description": "状态1", "type": "uint", "range": {"option": [{"value": 1, "description": "选项1"}, {"value": 2, "description": "选项2"} ], "default": -1}}], "event": [], "method": []}`,
+			"state[0]: range: default: NOT uint",
+			"uint类型中的range中的default不是uint类型",
 		},
 
 		{
@@ -720,6 +798,12 @@ func TestParseError(t *testing.T) {
 			`{"name": "test", "description": "测试物模型", "state": [], "event": [{"name": "  ok", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}, {"name": "ok  ", "description": "完成", "args": [{"name": "time", "description": "时间", "type": "uint"}, {"name": "msg", "description": "提示信息", "type": "string"}]}], "method": []}`,
 			"event[1]: repeat event name: \"ok\"",
 			"事件元信息event[1]的事件名重复",
+		},
+
+		{
+			`{"name": "test", "description": "测试物模型", "state": [], "event": [], "method": [123]}`,
+			"method[0]: NOT object",
+			"方法元信息不是对象",
 		},
 
 		{
@@ -863,6 +947,24 @@ func TestParseWithTemplateError(t *testing.T) {
 		wantErr string
 		desc    string
 	}{
+		{
+			`{"name": "{group/car / {id}/ tpqs", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			TemplateParam{
+				" id ": " #1 ",
+			},
+			"root: name: template \"{group\": missing '}'",
+			"模板格式出错1",
+		},
+
+		{
+			`{"name": "group}/car / {id}/ tpqs", "description": "测试物模型", "state": [], "event": [], "method": []}`,
+			TemplateParam{
+				" id ": " #1 ",
+			},
+			"root: name: template \"group}\": missing '{'",
+			"模板格式出错2",
+		},
+
 		{
 			`{"name": "{group}/car / {id}/ tpqs", "description": "测试物模型", "state": [], "event": [], "method": []}`,
 			TemplateParam{
@@ -1188,5 +1290,15 @@ func TestParseOk(t *testing.T) {
 	})
 	assert.Nil(t, err)
 	assert.EqualValues(t, meta, m)
+
+	assert.EqualValues(t, []string{
+		"A/car/#1/tpqs/tpqsInfo",
+		"A/car/#1/tpqs/powerInfo",
+	}, m.AllStates())
+
+	assert.EqualValues(t, []string{
+		"A/car/#1/tpqs/qsMotorOverCur",
+		"A/car/#1/tpqs/qsAction",
+	}, m.AllEvents())
 
 }
