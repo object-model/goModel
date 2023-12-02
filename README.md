@@ -418,6 +418,7 @@ Proxy is object model proxy server which can transmit model message and also pro
 3. 完成元信息加载解析支持模板参数的功能
 4. 完成和元信息模板参数相关的单元测试
 5. 所有去除空格都改成TrimSpace
+6. 元信息中为状态、事件和方法新建名称到下标的映射，便于后期按名称查询相关元信息
 
 ## 20231201
 

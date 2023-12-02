@@ -63,6 +63,9 @@ type Meta struct {
 
 	nameTokens    []string       // 物模型名称以/分割后的有效token
 	nameTemplates map[string]int // 模板参数名到nameTokens中的索引
+	stateIndex    map[string]int
+	eventIndex    map[string]int
+	methodIndex   map[string]int
 }
 
 type TemplateParam map[string]string
@@ -164,6 +167,9 @@ func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 		State:       make([]ParamMeta, 0, root.Get("state").Size()),
 		Event:       make([]EventMeta, 0, root.Get("event").Size()),
 		Method:      make([]MethodMeta, 0, root.Get("method").Size()),
+		stateIndex:  make(map[string]int),
+		eventIndex:  make(map[string]int),
+		methodIndex: make(map[string]int),
 	}
 
 	// 4.解析模板参数
@@ -180,16 +186,25 @@ func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 	// 6.更新模型名称
 	ans.Name = strings.Join(ans.nameTokens, "/")
 
+	// 7.解析状态元信息
 	for i := 0; i < root.Get("state").Size(); i++ {
-		ans.State = append(ans.State, createParamMeta(root.Get("state").Get(i)))
+		stateMeta := createParamMeta(root.Get("state").Get(i))
+		ans.stateIndex[*stateMeta.Name] = i
+		ans.State = append(ans.State, stateMeta)
 	}
 
+	// 8.解析事件元信息
 	for i := 0; i < root.Get("event").Size(); i++ {
-		ans.Event = append(ans.Event, createEventMeta(root.Get("event").Get(i)))
+		eventMeta := createEventMeta(root.Get("event").Get(i))
+		ans.eventIndex[eventMeta.Name] = i
+		ans.Event = append(ans.Event, eventMeta)
 	}
 
+	// 9.解析方法元信息
 	for i := 0; i < root.Get("method").Size(); i++ {
-		ans.Method = append(ans.Method, createMethodMeta(root.Get("method").Get(i)))
+		methodMeta := createMethodMeta(root.Get("method").Get(i))
+		ans.methodIndex[methodMeta.Name] = i
+		ans.Method = append(ans.Method, methodMeta)
 	}
 
 	return ans, nil

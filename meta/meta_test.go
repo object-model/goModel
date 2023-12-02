@@ -1165,6 +1165,20 @@ func TestParseOk(t *testing.T) {
 			"group": 0,
 			"id":    2,
 		},
+
+		stateIndex: map[string]int{
+			"tpqsInfo":  0,
+			"powerInfo": 1,
+		},
+
+		eventIndex: map[string]int{
+			"qsMotorOverCur": 0,
+			"qsAction":       1,
+		},
+
+		methodIndex: map[string]int{
+			"QS": 0,
+		},
 	}
 
 	json, _ := ioutil.ReadFile("./tpqs.json")

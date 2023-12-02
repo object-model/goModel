@@ -78,7 +78,7 @@
     },
 
     {
-      "name": "powerInfo",
+      "name": "  powerInfo\t",
       "description": "8路配电通道信息",
       "type": "array",
       "element": {
