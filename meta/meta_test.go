@@ -1078,6 +1078,10 @@ func TestParseOk(t *testing.T) {
 									Name:        newString("code"),
 									Description: newString("故障码值"),
 									Type:        "uint",
+									Range: &RangeInfo{
+										Max: uint(1000),
+										Min: uint(1),
+									},
 								},
 
 								{
@@ -1444,6 +1448,34 @@ func TestMeta_VerifyStateError(t *testing.T) {
 			},
 			errStr: "field \"errors\": nil slice",
 			desc:   "切片元素的类型正确，但为nil切片",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
+				Errors   []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  45.0,
+				Errors: []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				}{
+					{
+						Code: 1001,
+						Msg:  "位置消息",
+					},
+				},
+			},
+			errStr: "field \"errors\": element[0]: field \"code\": greater than max",
+			desc:   "切片中每个元素超限",
 		},
 
 		{
