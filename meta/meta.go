@@ -148,6 +148,7 @@ func (m *Meta) VerifyEvent(name string, args interface{}) error {
 			}
 		}
 
+		// NOTE: 字段一定是导出的
 		if found {
 			if fieldType.PkgPath != "" {
 				return fmt.Errorf("arg %q: unexported", argName)
@@ -160,6 +161,114 @@ func (m *Meta) VerifyEvent(name string, args interface{}) error {
 		fieldValue := Value.FieldByName(fieldType.Name)
 		if err := verifyData(argMeta, fieldValue.Interface()); err != nil {
 			return fmt.Errorf("arg %q: %s", argName, err)
+		}
+	}
+
+	return nil
+}
+
+func (m *Meta) VerifyMethodArgs(name string, args interface{}) error {
+	index, seen := m.methodIndex[name]
+	if !seen {
+		return fmt.Errorf("NO method %q", name)
+	}
+
+	Type := reflect.TypeOf(args)
+	Value := reflect.ValueOf(args)
+
+	// 1.参数args一定要是对象类型
+	if Type.Kind() != reflect.Struct {
+		return fmt.Errorf("args: NOT an struct")
+	}
+
+	// 2.每个参数是否匹配
+	// NOTE: 元信息中每个参数一定要在args中存在，且字段值能匹配
+	// NOTE: args中多余的字段不判断, 保持一定的兼容能力
+	for _, argMeta := range m.Method[index].Args {
+		argName := *argMeta.Name
+
+		var fieldType reflect.StructField
+		var found bool = false
+
+		// a.参数存在性
+		// 查找json标签为fieldName的字段类型
+		for j := 0; j < Type.NumField(); j++ {
+			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
+				if tag == argName {
+					fieldType = Type.Field(j)
+					found = true
+					break
+				}
+			}
+		}
+
+		// NOTE: 字段一定是导出的
+		if found {
+			if fieldType.PkgPath != "" {
+				return fmt.Errorf("arg %q: unexported", argName)
+			}
+		} else {
+			return fmt.Errorf("arg %q: missing", argName)
+		}
+
+		// b.参数值一致性
+		fieldValue := Value.FieldByName(fieldType.Name)
+		if err := verifyData(argMeta, fieldValue.Interface()); err != nil {
+			return fmt.Errorf("arg %q: %s", argName, err)
+		}
+	}
+
+	return nil
+}
+
+func (m *Meta) VerifyMethodResp(name string, resp interface{}) error {
+	index, seen := m.methodIndex[name]
+	if !seen {
+		return fmt.Errorf("NO method %q", name)
+	}
+
+	Type := reflect.TypeOf(resp)
+	Value := reflect.ValueOf(resp)
+
+	// 1.参数args一定要是对象类型
+	if Type.Kind() != reflect.Struct {
+		return fmt.Errorf("response: NOT an struct")
+	}
+
+	// 2.每个返回值是否匹配
+	// NOTE: 元信息中每个参数一定要在resp中存在，且字段值能匹配
+	// NOTE: resp中多余的字段不判断, 保持一定的兼容能力
+	for _, respMeta := range m.Method[index].Response {
+		respName := *respMeta.Name
+
+		var fieldType reflect.StructField
+		var found bool = false
+
+		// a.参数存在性
+		// 查找json标签为fieldName的字段类型
+		for j := 0; j < Type.NumField(); j++ {
+			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
+				if tag == respName {
+					fieldType = Type.Field(j)
+					found = true
+					break
+				}
+			}
+		}
+
+		// NOTE: 字段一定是导出的
+		if found {
+			if fieldType.PkgPath != "" {
+				return fmt.Errorf("response %q: unexported", respName)
+			}
+		} else {
+			return fmt.Errorf("response %q: missing", respName)
+		}
+
+		// b.参数值一致性
+		fieldValue := Value.FieldByName(fieldType.Name)
+		if err := verifyData(respMeta, fieldValue.Interface()); err != nil {
+			return fmt.Errorf("response %q: %s", respName, err)
 		}
 	}
 

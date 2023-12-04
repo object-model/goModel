@@ -2012,3 +2012,327 @@ func TestMeta_VerifyEventOK(t *testing.T) {
 		assert.Nil(t, err, test.Desc)
 	}
 }
+
+func TestMeta_VerifyMethodArgsError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name   string
+		args   interface{}
+		errStr string
+		desc   string
+	}
+
+	testCases := []TestCase{
+		{
+			name:   "unknown",
+			args:   123,
+			errStr: "NO method \"unknown\"",
+			desc:   "方法名不存在",
+		},
+
+		{
+			name:   "QS",
+			args:   3.14,
+			errStr: "args: NOT an struct",
+			desc:   "方法参数不是结构体类型",
+		},
+
+		{
+			name:   "QS",
+			args:   struct{}{},
+			errStr: "arg \"angle\": missing",
+			desc:   "方法参数中缺失字段",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				angle float64 `json:"angle"`
+			}{},
+			errStr: "arg \"angle\": unexported",
+			desc:   "方法参数中字段为私有字段",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				Angle float64 `json:"angle"`
+			}{
+				Angle: -1.0,
+			},
+			errStr: "arg \"angle\": less than min",
+			desc:   "方法参数中字段小于最小值",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				Angle float64 `json:"angle"`
+			}{
+				Angle: 91.0001,
+			},
+			errStr: "arg \"angle\": greater than max",
+			desc:   "方法参数中字段大于最大值",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				Angle float64 `json:"angle"`
+				Speed string  `json:"speed"`
+			}{
+				Angle: 90,
+				Speed: "unknown",
+			},
+			errStr: "arg \"speed\": \"unknown\" NOT in option",
+			desc:   "方法参数中字段不在可选项中",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyMethodArgs(test.name, test.args)
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+
+}
+
+func TestMeta_VerifyMethodArgsOK(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		args interface{}
+		desc string
+	}
+
+	testCases := []TestCase{
+		{
+			name: "QS",
+			args: struct {
+				Angle float64 `json:"angle"`
+				Speed string  `json:"speed"`
+			}{
+				Angle: 90,
+				Speed: "fast",
+			},
+			desc: "正常方法参数1",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				Angle float32 `json:"angle"`
+				Speed string  `json:"speed"`
+			}{
+				Angle: 91.000,
+				Speed: "middle",
+			},
+			desc: "正常方法参数2",
+		},
+
+		{
+			name: "QS",
+			args: struct {
+				Angle float32 `json:"angle"`
+				Speed string  `json:"speed"`
+			}{
+				Angle: 0.000,
+				Speed: "slow",
+			},
+			desc: "正常方法参数3",
+		},
+	}
+
+	for _, test := range testCases {
+		err := m.VerifyMethodArgs(test.name, test.args)
+		assert.Nil(t, err, test.desc)
+	}
+}
+
+func TestMeta_VerifyMethodRespError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name   string
+		resp   interface{}
+		errStr string
+		desc   string
+	}
+
+	testCases := []TestCase{
+		{
+			name:   "unknown",
+			resp:   123,
+			errStr: "NO method \"unknown\"",
+			desc:   "方法名不存在",
+		},
+
+		{
+			name:   "QS",
+			resp:   3.14,
+			errStr: "response: NOT an struct",
+			desc:   "方法返回值不是结构体类型",
+		},
+
+		{
+			name:   "QS",
+			resp:   struct{}{},
+			errStr: "response \"res\": missing",
+			desc:   "方法返回值中缺失字段",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res bool   `json:"res"`
+				msg string `json:"msg"`
+			}{},
+			errStr: "response \"msg\": unexported",
+			desc:   "方法返回值中为私有字段",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint32 `json:"time"`
+				Code int8   `json:"code"`
+			}{
+				Res:  false,
+				Time: 100001,
+				Msg:  "执行失败",
+				Code: 1,
+			},
+			errStr: "response \"time\": greater than max",
+			desc:   "方法返回值中的字段大于最大值",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint16 `json:"time"`
+				Code int    `json:"code"`
+			}{
+				Res:  true,
+				Time: 1,
+				Msg:  "执行成功",
+				Code: 4,
+			},
+			errStr: "response \"code\": 4 NOT in option",
+			desc:   "方法返回值中的字段不在可选项中",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyMethodResp(test.name, test.resp)
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+}
+
+func TestMeta_VerifyMethodRespOK(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		resp interface{}
+		desc string
+	}
+
+	testCases := []TestCase{
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint32 `json:"time"`
+				Code int8   `json:"code"`
+			}{
+				Res:  false,
+				Time: 100000,
+				Msg:  "执行失败",
+				Code: 1,
+			},
+			desc: "正常方法返回值1",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint16 `json:"time"`
+				Code int    `json:"code"`
+			}{
+				Res:  true,
+				Time: 0,
+				Msg:  "执行成功",
+				Code: 0,
+			},
+			desc: "正常方法返回值2",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint8  `json:"time"`
+				Code int    `json:"code"`
+			}{
+				Res:  true,
+				Time: 255,
+				Msg:  "执行成功",
+				Code: 2,
+			},
+			desc: "正常方法返回值3",
+		},
+
+		{
+			name: "QS",
+			resp: struct {
+				Res  bool   `json:"res"`
+				Msg  string `json:"msg"`
+				Time uint64 `json:"time"`
+				Code int    `json:"code"`
+			}{
+				Res:  true,
+				Time: 65536,
+				Msg:  "执行成功",
+				Code: 3,
+			},
+			desc: "正常方法返回值4",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyMethodResp(test.name, test.resp)
+		assert.Nil(t, err, test.desc)
+	}
+}
