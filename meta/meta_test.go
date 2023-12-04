@@ -6,6 +6,24 @@ import (
 	"testing"
 )
 
+const metaJson = `
+{
+	"name": "test",
+	"description": "测试元信息",
+	"state": [
+		{
+			"name": "metaInfo",
+			"description": "元信息",
+			"type": "meta"
+		}
+	],
+	"event": [
+	],
+	"method": [
+	]
+}
+`
+
 func newString(str string) *string {
 	return &str
 }
@@ -1506,6 +1524,103 @@ func TestMeta_VerifyStateError(t *testing.T) {
 	}
 }
 
+func TestMeta_VerifyStateMetaError(t *testing.T) {
+	m, err := Parse([]byte(metaJson), nil)
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		MetaData Meta
+		ErrStr   string
+		Desc     string
+	}
+
+	testCases := []TestCase{
+		{
+			MetaData: Meta{},
+			ErrStr:   "root: name is empty",
+			Desc:     "元信息name为空",
+		},
+
+		{
+			MetaData: Meta{
+				Name: "meta-info",
+			},
+			ErrStr: "root: description is empty",
+			Desc:   "元信息name为空",
+		},
+
+		{
+			MetaData: Meta{
+				Name:        "测试元信息",
+				Description: "测试元信息",
+			},
+			ErrStr: "root: state is NOT array",
+			Desc:   "元信息state为空",
+		},
+
+		{
+			MetaData: Meta{
+				Name:        "测试元信息",
+				Description: "测试元信息",
+				State:       make([]ParamMeta, 0),
+			},
+			ErrStr: "root: event is NOT array",
+			Desc:   "元信息event为空",
+		},
+
+		{
+			MetaData: Meta{
+				Name:        "测试元信息",
+				Description: "测试元信息",
+				State:       make([]ParamMeta, 0),
+				Event:       make([]EventMeta, 0),
+			},
+			ErrStr: "root: method is NOT array",
+			Desc:   "元信息method为空",
+		},
+
+		{
+			MetaData: Meta{
+				Name:        "测试元信息",
+				Description: "测试元信息",
+				State: []ParamMeta{
+					{
+						Type: "int",
+					},
+				},
+				Event:  make([]EventMeta, 0),
+				Method: make([]MethodMeta, 0),
+			},
+			ErrStr: "state[0]: name NOT exist",
+			Desc:   "元信息的状态名称不存在",
+		},
+
+		{
+			MetaData: Meta{
+				Name:        "测试元信息",
+				Description: "测试元信息",
+				State: []ParamMeta{
+					{
+						Name: newString("state1"),
+						Type: "int",
+					},
+				},
+				Event:  make([]EventMeta, 0),
+				Method: make([]MethodMeta, 0),
+			},
+			ErrStr: "state[0]: description NOT exist",
+			Desc:   "元信息的状态描述不存在",
+		},
+	}
+
+	for _, test := range testCases {
+		err := m.VerifyState("metaInfo", test.MetaData)
+		assert.NotNil(t, err, test.Desc)
+		assert.EqualValues(t, test.ErrStr, err.Error())
+	}
+
+}
+
 func TestMeta_VerifyEventError(t *testing.T) {
 	json, _ := ioutil.ReadFile("./tpqs.json")
 	m, err := Parse(json, TemplateParam{
@@ -1598,6 +1713,55 @@ func TestMeta_VerifyEventError(t *testing.T) {
 			}{},
 			errStr: "arg \"motors\": element: field \"rov\": unexported",
 			desc:   "事件参数的子字段非导出",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+					Rov uint `json:"rov"`
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"rov\": type unmatched",
+			desc:   "事件参数的子字段类型不匹配-rov为uint",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+					Rov int16   `json:"rov"`
+					Cur float64 `json:"cur"`
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"cur\": type unmatched",
+			desc:   "事件参数的子字段类型不匹配-cur为float",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+					Rov  int16  `json:"rov"`
+					Cur  int32  `json:"cur"`
+					Temp string `json:"temp"`
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"temp\": type unmatched",
+			desc:   "事件参数的子字段类型不匹配-temp为string",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+					Rov  int64   `json:"rov"`
+					Cur  int32   `json:"cur"`
+					Temp float32 `json:"temp"`
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"temp\": type unmatched",
+			desc:   "事件参数的子字段类型不匹配-temp为float32",
 		},
 	}
 
