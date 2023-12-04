@@ -1301,4 +1301,155 @@ func TestParseOk(t *testing.T) {
 		"A/car/#1/tpqs/qsAction",
 	}, m.AllEvents())
 
+	assert.EqualValues(t, []string{
+		"A/car/#1/tpqs/QS",
+	}, m.AllMethods())
+}
+
+func TestMeta_VerifyStateError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	testCases := []struct {
+		name   string
+		data   interface{}
+		errStr string
+		desc   string
+	}{
+		{
+			name:   "unknown",
+			data:   123,
+			errStr: "NO state \"unknown\"",
+			desc:   "不存在的状态",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   123,
+			errStr: "type unmatched",
+			desc:   "状态类型不匹配",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+			}{},
+			errStr: "field \"qsState\": missing",
+			desc:   "缺失字段",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				qsState string `json:"qsState"`
+			}{},
+			errStr: "field \"qsState\": unexported",
+			desc:   "字段未导出",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState float64 `json:"qsState"`
+			}{},
+			errStr: "field \"qsState\": type unmatched",
+			desc:   "字段类型不匹配",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState string `json:"qsState"`
+			}{
+				QSState: "unknown",
+			},
+			errStr: "field \"qsState\": \"unknown\" NOT in option",
+			desc:   "字段值不在范围的可选项中",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch int8    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: 0,
+				QSAngle:  -1.2,
+			},
+			errStr: "field \"hpSwitch\": type unmatched",
+			desc:   "bool类型的字段类型不匹配",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  -1.2,
+			},
+			errStr: "field \"qsAngle\": less than min",
+			desc:   "字段值小于最小值",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  200.1,
+			},
+			errStr: "field \"qsAngle\": greater than max",
+			desc:   "字段值大于最大值",
+		},
+
+		{
+			name: "powerInfo",
+			data: [4]struct {
+				IsOn   bool    `json:"isOn"`
+				OutCur float64 `json:"outCur"`
+			}{},
+			errStr: "length NOT equal to 8",
+			desc:   "数组类型状态长度错误",
+		},
+
+		{
+			name: "powerInfo",
+			data: [8]struct {
+				IsOn   bool    `json:"isOn"`
+				OutCur float32 `json:"outCur"`
+			}{
+				{
+					IsOn:   true,
+					OutCur: 100000,
+				},
+
+				{
+					IsOn:   true,
+					OutCur: 100001,
+				},
+			},
+			errStr: "element[1]: field \"outCur\": greater than max",
+			desc:   "数组中某一项的某个字段超限",
+		},
+	}
+
+	for _, test := range testCases {
+		err := m.VerifyState(test.name, test.data)
+		assert.NotNil(t, err)
+		assert.EqualValues(t, test.errStr, err.Error())
+	}
 }

@@ -2,7 +2,9 @@ package meta
 
 import (
 	"fmt"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"reflect"
 	"strings"
 )
 
@@ -24,21 +26,21 @@ type OptionInfo struct {
 }
 
 type RangeInfo struct {
-	Max     interface{}  `json:"max"`
-	Min     interface{}  `json:"min"`
-	Option  []OptionInfo `json:"option"`
-	Default interface{}  `json:"default"`
+	Max     interface{}  `json:"max,omitempty"`
+	Min     interface{}  `json:"min,omitempty"`
+	Option  []OptionInfo `json:"option,omitempty"`
+	Default interface{}  `json:"default,omitempty"`
 }
 
 type ParamMeta struct {
-	Name        *string     `json:"name"`
-	Description *string     `json:"description"`
+	Name        *string     `json:"name,omitempty"`
+	Description *string     `json:"description,omitempty"`
 	Type        string      `json:"type"`
-	Element     *ParamMeta  `json:"element"`
-	Fields      []ParamMeta `json:"fields"`
-	Length      *uint       `json:"length"`
-	Unit        *string     `json:"unit"`
-	Range       *RangeInfo  `json:"range"`
+	Element     *ParamMeta  `json:"element,omitempty"`
+	Fields      []ParamMeta `json:"fields,omitempty"`
+	Length      *uint       `json:"length,omitempty"`
+	Unit        *string     `json:"unit,omitempty"`
+	Range       *RangeInfo  `json:"range,omitempty"`
 }
 
 type EventMeta struct {
@@ -63,9 +65,9 @@ type Meta struct {
 
 	nameTokens    []string       // 物模型名称以/分割后的有效token
 	nameTemplates map[string]int // 模板参数名到nameTokens中的索引
-	stateIndex    map[string]int
-	eventIndex    map[string]int
-	methodIndex   map[string]int
+	stateIndex    map[string]int // 状态名称索引
+	eventIndex    map[string]int // 事件名称索引
+	methodIndex   map[string]int // 方法名称索引
 }
 
 type TemplateParam map[string]string
@@ -90,6 +92,305 @@ func (m *Meta) AllEvents() []string {
 		}, "/"))
 	}
 	return res
+}
+
+func (m *Meta) AllMethods() []string {
+	res := make([]string, 0, len(m.Method))
+	for i := range m.Method {
+		res = append(res, strings.Join([]string{
+			m.Name,
+			m.Method[i].Name,
+		}, "/"))
+	}
+	return res
+}
+
+func (m *Meta) VerifyState(name string, data interface{}) error {
+	if index, seen := m.stateIndex[name]; !seen {
+		return fmt.Errorf("NO state %q", name)
+	} else {
+		return verifyData(m.State[index], data)
+	}
+}
+
+func verifyData(meta ParamMeta, data interface{}) error {
+	switch meta.Type {
+	case "int":
+		return verifyIntData(meta, data)
+	case "uint":
+		return verifyUintData(meta, data)
+	case "float":
+		return verifyFloatData(meta, data)
+	case "bool":
+		if _, isBool := data.(bool); !isBool {
+			return fmt.Errorf("type unmatched")
+		}
+	case "string":
+		return verifyStringData(meta, data)
+	case "array":
+		return verifyArrayData(meta, data)
+	case "slice":
+		return verifySliceData(meta, data)
+	case "struct":
+		return verifyStructData(meta, data)
+	case "meta":
+		return verifyMetaData(data)
+	}
+	return nil
+}
+
+func verifyIntData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	var value int
+	switch data.(type) {
+	case int:
+		value = data.(int)
+	case int8:
+		value = int(data.(int8))
+	case int16:
+		value = int(data.(int16))
+	case int32:
+		value = int(data.(int32))
+	case int64:
+		value = int(data.(int64))
+	default:
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.如果有范围约束，检查是否在范围内
+	if meta.Range != nil {
+		// 如果有option, 则以option为准，否则以最大最小值为准
+		if meta.Range.Option != nil {
+			seen := false
+			for _, option := range meta.Range.Option {
+				if option.Value.(int) == value {
+					seen = true
+					break
+				}
+			}
+			if !seen {
+				return fmt.Errorf("%d NOT in option", value)
+			}
+		} else {
+			if meta.Range.Min != nil {
+				min := meta.Range.Min.(int)
+				if value < min {
+					return fmt.Errorf("less than min")
+				}
+			}
+			if meta.Range.Max != nil {
+				max := meta.Range.Max.(int)
+				if value > max {
+					return fmt.Errorf("greater than max")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func verifyUintData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	var value uint
+	switch data.(type) {
+	case uint:
+		value = data.(uint)
+	case uint8:
+		value = uint(data.(uint8))
+	case uint16:
+		value = uint(data.(uint16))
+	case uint32:
+		value = uint(data.(uint32))
+	case uint64:
+		value = uint(data.(uint64))
+	default:
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.如果有范围约束，检查是否在范围内
+	if meta.Range != nil {
+		// 如果有option, 则以option为准，否则以最大最小值为准
+		if meta.Range.Option != nil {
+			seen := false
+			for _, option := range meta.Range.Option {
+				if option.Value.(uint) == value {
+					seen = true
+					break
+				}
+			}
+			if !seen {
+				return fmt.Errorf("%d NOT in option", value)
+			}
+		} else {
+			if meta.Range.Min != nil {
+				min := meta.Range.Min.(uint)
+				if value < min {
+					return fmt.Errorf("less than min")
+				}
+			}
+			if meta.Range.Max != nil {
+				max := meta.Range.Max.(uint)
+				if value > max {
+					return fmt.Errorf("greater than max")
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func verifyFloatData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	var value float64
+	switch data.(type) {
+	case float64:
+		value = data.(float64)
+	case float32:
+		value = float64(data.(float32))
+	default:
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.如果有范围约束，检查是否在范围内
+	if meta.Range != nil {
+		if meta.Range.Min != nil {
+			min := meta.Range.Min.(float64)
+			if value < min {
+				return fmt.Errorf("less than min")
+			}
+		}
+		if meta.Range.Max != nil {
+			max := meta.Range.Max.(float64)
+			if value > max {
+				return fmt.Errorf("greater than max")
+			}
+		}
+	}
+	return nil
+}
+
+func verifyStringData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	value, isString := data.(string)
+	if !isString {
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.如果有范围约束，检查是否在范围内
+	if meta.Range != nil {
+		seen := false
+		for _, option := range meta.Range.Option {
+			if option.Value.(string) == value {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			return fmt.Errorf("%q NOT in option", value)
+		}
+	}
+	return nil
+}
+
+func verifyArrayData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	if reflect.TypeOf(data).Kind() != reflect.Array {
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.长度匹配
+	if uint(reflect.TypeOf(data).Len()) != *meta.Length {
+		return fmt.Errorf("length NOT equal to %d", *meta.Length)
+	}
+
+	// 3.数组中每个元素是否匹配
+	value := reflect.ValueOf(data)
+	for i := 0; i < value.Len(); i++ {
+		err := verifyData(*meta.Element, value.Index(i).Interface())
+		if err != nil {
+			return fmt.Errorf("element[%d]: %s", i, err)
+		}
+	}
+	return nil
+}
+
+func verifySliceData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	kind := reflect.TypeOf(data).Kind()
+	if kind != reflect.Array && kind != reflect.Slice {
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.数组中每个元素是否匹配
+	value := reflect.ValueOf(data)
+	for i := 0; i < value.Len(); i++ {
+		err := verifyData(*meta.Element, value.Index(i).Interface())
+		if err != nil {
+			return fmt.Errorf("element[%d]: %s", i, err)
+		}
+	}
+	return nil
+}
+
+func verifyStructData(meta ParamMeta, data interface{}) error {
+	// 1.类型是否匹配
+	Type := reflect.TypeOf(data)
+	kind := reflect.TypeOf(data).Kind()
+	if kind != reflect.Struct {
+		return fmt.Errorf("type unmatched")
+	}
+
+	// 2.每个成员是否匹配
+	value := reflect.ValueOf(data)
+	for i := range meta.Fields {
+		fieldName := *(meta.Fields[i].Name)
+
+		var fieldType reflect.StructField
+		var found bool = false
+
+		// 查找json标签为fieldName的字段类型
+		for j := 0; j < Type.NumField(); j++ {
+			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
+				if tag == fieldName {
+					fieldType = Type.Field(j)
+					found = true
+					break
+				}
+			}
+		}
+
+		if found {
+			if fieldType.PkgPath != "" {
+				return fmt.Errorf("field %q: unexported", fieldName)
+			}
+		} else {
+			return fmt.Errorf("field %q: missing", fieldName)
+		}
+
+		fieldValue := value.FieldByName(fieldType.Name)
+
+		if err := verifyData(meta.Fields[i], fieldValue.Interface()); err != nil {
+			return fmt.Errorf("field %q: %s", fieldName, err)
+		}
+	}
+	return nil
+}
+
+func verifyMetaData(data interface{}) error {
+	meta, isMeta := data.(Meta)
+	if !isMeta {
+		return fmt.Errorf("type unmatched")
+	}
+
+	jsonData, err := jsoniter.Marshal(meta)
+	if err != nil {
+		return fmt.Errorf("invalid meta")
+	}
+
+	_, err = Parse(jsonData, nil)
+	return err
 }
 
 func (m *Meta) parseTemplate(name string) {
@@ -153,12 +454,12 @@ func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 	it := jsoniter.ParseBytes(jsoniter.ConfigDefault, rawData)
 	root := it.ReadAny()
 	if it.Error != nil || it.WhatIsNext() != jsoniter.InvalidValue {
-		return Meta{}, fmt.Errorf("parse JSON failed")
+		return NewEmptyMeta(), fmt.Errorf("parse JSON failed")
 	}
 
 	// 2. 检查元信息是否正确
 	if err := check(root); err != nil {
-		return Meta{}, err
+		return NewEmptyMeta(), err
 	}
 
 	// 3. 解析
@@ -180,7 +481,7 @@ func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 
 	// 5.保存模板参数
 	if err := ans.setTemplate(templateParam); err != nil {
-		return Meta{}, err
+		return NewEmptyMeta(), err
 	}
 
 	// 6.更新模型名称
@@ -1274,5 +1575,27 @@ func trimTemplate(param TemplateParam) TemplateParam {
 	for name, val := range param {
 		ans[strings.TrimSpace(name)] = strings.TrimSpace(val)
 	}
+	return ans
+}
+
+const empty = `
+{
+	"name": "__empty__/{uuid}",
+	"description": "empty model meta information",
+	"state": [],
+	"event": [],
+	"method": []
+}
+`
+
+func NewEmptyMeta() Meta {
+	ans, err := Parse([]byte(empty), TemplateParam{
+		"uuid": uuid.New().String(),
+	})
+
+	if err != nil {
+		panic(err)
+	}
+
 	return ans
 }

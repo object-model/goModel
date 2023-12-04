@@ -411,6 +411,12 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 更新日志
 
+## 20231203
+
+1. 物模型元信息解析失败返回一个包含uuid模板的空的物模型
+2. 完成根据元信息校验状态的功能
+3. 完成状态校验的部分测试用例
+
 ## 20231202
 
 1. 元信息的解析支持去除多余的空格以增强适用性
