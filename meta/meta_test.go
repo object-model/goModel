@@ -1470,12 +1470,40 @@ func TestMeta_VerifyStateError(t *testing.T) {
 				}{
 					{
 						Code: 1001,
-						Msg:  "位置消息",
+						Msg:  "未知消息",
 					},
 				},
 			},
 			errStr: "field \"errors\": element[0]: field \"code\": greater than max",
-			desc:   "切片中每个元素超限",
+			desc:   "切片中某个元素超限--大于最大值",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float32 `json:"qsAngle"`
+				Errors   []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  25.46,
+				Errors: []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				}{
+					{
+						Code: 0,
+						Msg:  "未知消息",
+					},
+				},
+			},
+			errStr: "field \"errors\": element[0]: field \"code\": less than min",
+			desc:   "切片中某个元素超限--小于最小值",
 		},
 
 		{
