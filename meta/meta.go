@@ -113,33 +113,93 @@ func (m *Meta) VerifyState(name string, data interface{}) error {
 	}
 }
 
+func (m *Meta) VerifyEvent(name string, args interface{}) error {
+	index, seen := m.eventIndex[name]
+	if !seen {
+		return fmt.Errorf("NO event %q", name)
+	}
+
+	Type := reflect.TypeOf(args)
+	Value := reflect.ValueOf(args)
+
+	// 1.参数args一定要是对象类型
+	if Type.Kind() != reflect.Struct {
+		return fmt.Errorf("args: NOT an struct")
+	}
+
+	// 2.每个参数是否匹配
+	// NOTE: 元信息中每个参数一定要在args中存在，且字段值能匹配
+	// NOTE: args中多余的字段不判断, 保持一定的兼容能力
+	for _, argMeta := range m.Event[index].Args {
+		argName := *argMeta.Name
+
+		var fieldType reflect.StructField
+		var found bool = false
+
+		// a.参数存在性
+		// 查找json标签为fieldName的字段类型
+		for j := 0; j < Type.NumField(); j++ {
+			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
+				if tag == argName {
+					fieldType = Type.Field(j)
+					found = true
+					break
+				}
+			}
+		}
+
+		if found {
+			if fieldType.PkgPath != "" {
+				return fmt.Errorf("arg %q: unexported", argName)
+			}
+		} else {
+			return fmt.Errorf("arg %q: missing", argName)
+		}
+
+		// b.参数值一致性
+		fieldValue := Value.FieldByName(fieldType.Name)
+		if err := verifyData(argMeta, fieldValue.Interface()); err != nil {
+			return fmt.Errorf("arg %q: %s", argName, err)
+		}
+	}
+
+	return nil
+}
+
 func verifyData(meta ParamMeta, data interface{}) error {
+	return _verifyData_(meta, data, true)
+}
+
+func _verifyData_(meta ParamMeta, data interface{}, checkRange bool) error {
+	if data == nil {
+		return fmt.Errorf("nil")
+	}
 	switch meta.Type {
 	case "int":
-		return verifyIntData(meta, data)
+		return verifyIntData(meta, data, checkRange)
 	case "uint":
-		return verifyUintData(meta, data)
+		return verifyUintData(meta, data, checkRange)
 	case "float":
-		return verifyFloatData(meta, data)
+		return verifyFloatData(meta, data, checkRange)
 	case "bool":
 		if _, isBool := data.(bool); !isBool {
 			return fmt.Errorf("type unmatched")
 		}
 	case "string":
-		return verifyStringData(meta, data)
+		return verifyStringData(meta, data, checkRange)
 	case "array":
-		return verifyArrayData(meta, data)
+		return verifyArrayData(meta, data, checkRange)
 	case "slice":
-		return verifySliceData(meta, data)
+		return verifySliceData(meta, data, checkRange)
 	case "struct":
-		return verifyStructData(meta, data)
+		return verifyStructData(meta, data, checkRange)
 	case "meta":
 		return verifyMetaData(data)
 	}
 	return nil
 }
 
-func verifyIntData(meta ParamMeta, data interface{}) error {
+func verifyIntData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	var value int
 	switch data.(type) {
@@ -158,7 +218,7 @@ func verifyIntData(meta ParamMeta, data interface{}) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if meta.Range != nil {
+	if checkRange && meta.Range != nil {
 		// 如果有option, 则以option为准，否则以最大最小值为准
 		if meta.Range.Option != nil {
 			seen := false
@@ -190,7 +250,7 @@ func verifyIntData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifyUintData(meta ParamMeta, data interface{}) error {
+func verifyUintData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	var value uint
 	switch data.(type) {
@@ -209,7 +269,7 @@ func verifyUintData(meta ParamMeta, data interface{}) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if meta.Range != nil {
+	if checkRange && meta.Range != nil {
 		// 如果有option, 则以option为准，否则以最大最小值为准
 		if meta.Range.Option != nil {
 			seen := false
@@ -241,7 +301,7 @@ func verifyUintData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifyFloatData(meta ParamMeta, data interface{}) error {
+func verifyFloatData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	var value float64
 	switch data.(type) {
@@ -254,7 +314,7 @@ func verifyFloatData(meta ParamMeta, data interface{}) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if meta.Range != nil {
+	if checkRange && meta.Range != nil {
 		if meta.Range.Min != nil {
 			min := meta.Range.Min.(float64)
 			if value < min {
@@ -271,7 +331,7 @@ func verifyFloatData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifyStringData(meta ParamMeta, data interface{}) error {
+func verifyStringData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	value, isString := data.(string)
 	if !isString {
@@ -279,7 +339,7 @@ func verifyStringData(meta ParamMeta, data interface{}) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if meta.Range != nil {
+	if checkRange && meta.Range != nil {
 		seen := false
 		for _, option := range meta.Range.Option {
 			if option.Value.(string) == value {
@@ -294,7 +354,7 @@ func verifyStringData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifyArrayData(meta ParamMeta, data interface{}) error {
+func verifyArrayData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	if reflect.TypeOf(data).Kind() != reflect.Array {
 		return fmt.Errorf("type unmatched")
@@ -305,10 +365,18 @@ func verifyArrayData(meta ParamMeta, data interface{}) error {
 		return fmt.Errorf("length NOT equal to %d", *meta.Length)
 	}
 
-	// 3.数组中每个元素是否匹配
+	// 3.数组元素类型也得匹配
+	// NOTE: 必须要先判断数组元素类型是否匹配
+	// NOTE: 另外，在检查数组元素类型时不检查范围，避免因范围不通过而导致的类型错误
+	zeroElem := reflect.New(reflect.TypeOf(data).Elem()).Elem().Interface()
+	if err := _verifyData_(*meta.Element, zeroElem, false); err != nil {
+		return fmt.Errorf("element: %s", err)
+	}
+
+	// 4.数组中每个元素是否匹配
 	value := reflect.ValueOf(data)
 	for i := 0; i < value.Len(); i++ {
-		err := verifyData(*meta.Element, value.Index(i).Interface())
+		err := _verifyData_(*meta.Element, value.Index(i).Interface(), checkRange)
 		if err != nil {
 			return fmt.Errorf("element[%d]: %s", i, err)
 		}
@@ -316,17 +384,31 @@ func verifyArrayData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifySliceData(meta ParamMeta, data interface{}) error {
+func verifySliceData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	kind := reflect.TypeOf(data).Kind()
 	if kind != reflect.Array && kind != reflect.Slice {
 		return fmt.Errorf("type unmatched")
 	}
 
-	// 2.数组中每个元素是否匹配
+	// 2.切片元素类型也得匹配
+	// NOTE: 必须要先判断切片元素类型是否匹配！
+	// NOTE: 否则在传入一个空的切片但元素类型不匹配时，会因为进入不了步骤4的判断，而导致校验通过！
+	// NOTE: 另外，在检查切片元素类型时不检查范围，避免因范围不通过而导致的类型错误
+	zeroElem := reflect.New(reflect.TypeOf(data).Elem()).Elem().Interface()
+	if err := _verifyData_(*meta.Element, zeroElem, false); err != nil {
+		return fmt.Errorf("element: %s", err)
+	}
+
+	// 3.不能是nil的切片，但可以是长度为0的切片
 	value := reflect.ValueOf(data)
+	if value.IsNil() {
+		return fmt.Errorf("nil slice")
+	}
+
+	// 4.切片中每个元素是否匹配
 	for i := 0; i < value.Len(); i++ {
-		err := verifyData(*meta.Element, value.Index(i).Interface())
+		err := _verifyData_(*meta.Element, value.Index(i).Interface(), checkRange)
 		if err != nil {
 			return fmt.Errorf("element[%d]: %s", i, err)
 		}
@@ -334,7 +416,7 @@ func verifySliceData(meta ParamMeta, data interface{}) error {
 	return nil
 }
 
-func verifyStructData(meta ParamMeta, data interface{}) error {
+func verifyStructData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	Type := reflect.TypeOf(data)
 	kind := reflect.TypeOf(data).Kind()
@@ -371,7 +453,7 @@ func verifyStructData(meta ParamMeta, data interface{}) error {
 
 		fieldValue := value.FieldByName(fieldType.Name)
 
-		if err := verifyData(meta.Fields[i], fieldValue.Interface()); err != nil {
+		if err := _verifyData_(meta.Fields[i], fieldValue.Interface(), checkRange); err != nil {
 			return fmt.Errorf("field %q: %s", fieldName, err)
 		}
 	}

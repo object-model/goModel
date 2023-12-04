@@ -414,8 +414,27 @@ Proxy is object model proxy server which can transmit model message and also pro
 ## 20231203
 
 1. 物模型元信息解析失败返回一个包含uuid模板的空的物模型
+
 2. 完成根据元信息校验状态的功能
+
 3. 完成状态校验的部分测试用例
+
+4. 完成根据事件元信息校验事件的功能
+
+5. 完成事件校验的测试用例
+
+6. 校验数据时，添加是否校验范围的选项。目的是在校验数组或者切片的元素类型时不会因为范围出错而导致类型错误，数组或者切片的元素类型的校验是通过反射创建的变量来校验的，在创建时没有代入范围信息
+
+   ```go
+   	zeroElem := reflect.New(reflect.TypeOf(data).Elem()).Elem().Interface()
+   	if err := _verifyData_(*meta.Element, zeroElem, false); err != nil {
+   		return fmt.Errorf("element: %s", err)
+   	}
+   ```
+
+7. 数组或切片类型的参数在逐个校验每个元素之前，先通过反射机制校验其元素类型是否符合元信息！如果不这么做，在类型为切片，数据的切片长度为0的情况下，错误的元素类型也能校验通过；在类型为数组时，报错信息不合适
+
+8. 切片类型的校验，添加不能为`nil`的先决条件，保证编码后始终为数组`[]`
 
 ## 20231202
 

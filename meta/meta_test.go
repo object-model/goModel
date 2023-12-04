@@ -1392,6 +1392,48 @@ func TestMeta_VerifyStateError(t *testing.T) {
 				QSState  string  `json:"qsState"`
 				HPSwitch bool    `json:"hpSwitch"`
 				QSAngle  float64 `json:"qsAngle"`
+				Errors   []struct {
+					Code int    `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  45.0,
+				Errors: []struct {
+					Code int    `json:"code"`
+					Msg  string `json:"msg"`
+				}{},
+			},
+			errStr: "field \"errors\": element: field \"code\": type unmatched",
+			desc:   "切片类型的子字段值为空，但切片元素的类型不正确",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
+				Errors   []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  45.0,
+			},
+			errStr: "field \"errors\": nil slice",
+			desc:   "切片元素的类型正确，但为nil切片",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
 			}{
 				QSState:  "erecting",
 				HPSwitch: false,
@@ -1429,6 +1471,16 @@ func TestMeta_VerifyStateError(t *testing.T) {
 		{
 			name: "powerInfo",
 			data: [8]struct {
+				IsOn   int8    `json:"isOn"`
+				OutCur float64 `json:"outCur"`
+			}{},
+			errStr: "element: field \"isOn\": type unmatched",
+			desc:   "数组元素类型不匹配",
+		},
+
+		{
+			name: "powerInfo",
+			data: [8]struct {
 				IsOn   bool    `json:"isOn"`
 				OutCur float32 `json:"outCur"`
 			}{
@@ -1448,8 +1500,110 @@ func TestMeta_VerifyStateError(t *testing.T) {
 	}
 
 	for _, test := range testCases {
-		err := m.VerifyState(test.name, test.data)
-		assert.NotNil(t, err)
-		assert.EqualValues(t, test.errStr, err.Error())
+		err = m.VerifyState(test.name, test.data)
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+}
+
+func TestMeta_VerifyEventError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	testCases := []struct {
+		name   string
+		args   interface{}
+		errStr string
+		desc   string
+	}{
+		{
+			name:   "unknown",
+			args:   "null",
+			errStr: "NO event \"unknown\"",
+			desc:   "不存在的事件",
+		},
+
+		{
+			name:   "qsMotorOverCur",
+			args:   "hello",
+			errStr: "args: NOT an struct",
+			desc:   "事件参数类型不匹配",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+			}{},
+			errStr: "arg \"motors\": missing",
+			desc:   "事件参数缺失",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]float32
+			}{},
+			errStr: "arg \"motors\": missing",
+			desc:   "事件参数缺失--没有json标签",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				motors [4]float32 `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": unexported",
+			desc:   "事件参数为非导出字段",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors []int `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": type unmatched",
+			desc:   "事件参数类型不匹配",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [5]struct {
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": length NOT equal to 4",
+			desc:   "数组类型的事件参数长度不匹配",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"rov\": missing",
+			desc:   "事件参数的子字段缺失",
+		},
+
+		{
+			name: "qsAction",
+			args: struct {
+				Motors [4]struct {
+					rov int `json:"rov"`
+				} `json:"motors"`
+			}{},
+			errStr: "arg \"motors\": element: field \"rov\": unexported",
+			desc:   "事件参数的子字段非导出",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyEvent(test.name, test.args)
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
 	}
 }
