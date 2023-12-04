@@ -1911,3 +1911,76 @@ func TestMeta_VerifyEventError(t *testing.T) {
 		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
 	}
 }
+
+func TestMeta_VerifyEventOK(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		Name string
+		Args interface{}
+		Desc string
+	}
+
+	testCases := []TestCase{
+		{
+			Name: "qsMotorOverCur",
+			Args: struct{}{},
+			Desc: "正常事件参数1",
+		},
+
+		{
+			Name: "qsAction",
+			Args: struct {
+				Motors [4]struct {
+					Rov  int   `json:"rov"`
+					Cur  int32 `json:"cur"`
+					Temp int8  `json:"temp"`
+				} `json:"motors"`
+				QsAngle float32 `json:"qsAngle"`
+			}{
+				Motors: [4]struct {
+					Rov  int   `json:"rov"`
+					Cur  int32 `json:"cur"`
+					Temp int8  `json:"temp"`
+				}{
+					{
+						Rov:  1200,
+						Cur:  1369,
+						Temp: 64,
+					},
+
+					{
+						Rov:  1206,
+						Cur:  1405,
+						Temp: 63,
+					},
+
+					{
+						Rov:  1204,
+						Cur:  1402,
+						Temp: 64,
+					},
+
+					{
+						Rov:  1206,
+						Cur:  1406,
+						Temp: 64,
+					},
+				},
+
+				QsAngle: 89.6,
+			},
+			Desc: "正常事件参数2",
+		},
+	}
+
+	for _, test := range testCases {
+		err := m.VerifyEvent(test.Name, test.Args)
+		assert.Nil(t, err, test.Desc)
+	}
+}
