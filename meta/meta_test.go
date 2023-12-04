@@ -1621,6 +1621,114 @@ func TestMeta_VerifyStateMetaError(t *testing.T) {
 
 }
 
+func TestMeta_VerifyStateOK(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		Name string
+		Data interface{}
+		Desc string
+	}
+
+	testCases := []TestCase{
+		{
+			Name: "tpqsInfo",
+			Data: struct {
+				QsState  string  `json:"qsState"`
+				HpSwitch bool    `json:"hpSwitch"`
+				QsAngle  float32 `json:"qsAngle"`
+				Errors   [2]struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QsState:  "hping",
+				HpSwitch: false,
+				QsAngle:  89.6,
+				Errors: [2]struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				}{
+					{
+						Code: 1,
+						Msg:  "温度超限",
+					},
+
+					{
+						Code: 2,
+						Msg:  "电压超限",
+					},
+				},
+			},
+			Desc: "正常状态1",
+		},
+
+		{
+			Name: "tpqsInfo",
+			Data: struct {
+				QsState  string  `json:"qsState"`
+				HpSwitch bool    `json:"hpSwitch"`
+				QsAngle  float64 `json:"qsAngle"`
+				Errors   []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QsState:  "hping",
+				HpSwitch: false,
+				QsAngle:  0.0,
+				Errors: []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				}{
+					{
+						Code: 1,
+						Msg:  "温度超限",
+					},
+
+					{
+						Code: 2,
+						Msg:  "电压超限",
+					},
+				},
+			},
+			Desc: "正常状态2",
+		},
+
+		{
+			Name: "tpqsInfo",
+			Data: struct {
+				QsState  string  `json:"qsState"`
+				HpSwitch bool    `json:"hpSwitch"`
+				QsAngle  float64 `json:"qsAngle"`
+				Errors   []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				} `json:"errors"`
+			}{
+				QsState:  "downing",
+				HpSwitch: false,
+				QsAngle:  200.0,
+				Errors: []struct {
+					Code uint   `json:"code"`
+					Msg  string `json:"msg"`
+				}{},
+			},
+			Desc: "正常状态3",
+		},
+	}
+
+	for _, test := range testCases {
+		err := m.VerifyState(test.Name, test.Data)
+		assert.Nil(t, err, test.Desc)
+	}
+}
+
 func TestMeta_VerifyEventError(t *testing.T) {
 	json, _ := ioutil.ReadFile("./tpqs.json")
 	m, err := Parse(json, TemplateParam{

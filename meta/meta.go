@@ -402,7 +402,7 @@ func verifySliceData(meta ParamMeta, data interface{}, checkRange bool) error {
 
 	// 3.不能是nil的切片，但可以是长度为0的切片
 	value := reflect.ValueOf(data)
-	if value.IsNil() {
+	if kind == reflect.Slice && value.IsNil() {
 		return fmt.Errorf("nil slice")
 	}
 
