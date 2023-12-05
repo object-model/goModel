@@ -415,6 +415,8 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 1. 优化程序模块划分，将所有物模型报文的编码都整合到message中，将不属于message的部分移动到别处
 1. 元信息添加序列化成JSON串的接口，且有缓存功能，最多只序列化一次
+1. 根据元信息校验事件参数、方法参数和方法返回值采用message中的类型
+1. 校验浮点数据支撑int、uint兼容的类型
 
 ## 20231203
 

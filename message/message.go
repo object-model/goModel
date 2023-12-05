@@ -3,7 +3,6 @@ package message
 import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
-	"proxy/meta"
 )
 
 const (
@@ -228,11 +227,6 @@ func EncodeRespMsg(uuid string, errStr string, resp Resp) ([]byte, error) {
 // EncodeQueryMetaMsg 编码一个查询物模型元信息JSON报文, 返回JSON编码后的全报文数据
 func EncodeQueryMetaMsg() []byte {
 	return []byte(`{ "type": "query-meta", "payload": null}`)
-}
-
-// EncodeMetaMsg 编码一个物模型元信息JSON报文,返回JSON编码后的全报文数据和错误信息
-func EncodeMetaMsg(meta meta.Meta) ([]byte, error) {
-	return EncodeMsg("meta-info", meta.ToJSON())
 }
 
 // EncodeMsg 编码一个报文类型为Type,报文数据域为payload的JSON报文,

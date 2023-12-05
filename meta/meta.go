@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"proxy/message"
 	"reflect"
 	"strings"
 	"sync"
@@ -132,53 +133,31 @@ func (m *Meta) VerifyState(name string, data interface{}) error {
 	}
 }
 
-func (m *Meta) VerifyEvent(name string, args interface{}) error {
+func (m *Meta) VerifyEvent(name string, args message.Args) error {
 	index, seen := m.eventIndex[name]
 	if !seen {
 		return fmt.Errorf("NO event %q", name)
 	}
 
-	Type := reflect.TypeOf(args)
-	Value := reflect.ValueOf(args)
-
-	// 1.参数args一定要是对象类型
-	if Type.Kind() != reflect.Struct {
-		return fmt.Errorf("args: NOT an struct")
+	// 参数不能为空
+	if args == nil {
+		return fmt.Errorf("nil event args")
 	}
 
-	// 2.每个参数是否匹配
+	// 每个参数是否匹配
 	// NOTE: 元信息中每个参数一定要在args中存在，且字段值能匹配
 	// NOTE: args中多余的字段不判断, 保持一定的兼容能力
 	for _, argMeta := range m.Event[index].Args {
 		argName := *argMeta.Name
 
-		var fieldType reflect.StructField
-		var found bool = false
-
 		// a.参数存在性
-		// 查找json标签为fieldName的字段类型
-		for j := 0; j < Type.NumField(); j++ {
-			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
-				if tag == argName {
-					fieldType = Type.Field(j)
-					found = true
-					break
-				}
-			}
-		}
-
-		// NOTE: 字段一定是导出的
-		if found {
-			if fieldType.PkgPath != "" {
-				return fmt.Errorf("arg %q: unexported", argName)
-			}
-		} else {
+		value, seen := args[argName]
+		if !seen {
 			return fmt.Errorf("arg %q: missing", argName)
 		}
 
 		// b.参数值一致性
-		fieldValue := Value.FieldByName(fieldType.Name)
-		if err := verifyData(argMeta, fieldValue.Interface()); err != nil {
+		if err := verifyData(argMeta, value); err != nil {
 			return fmt.Errorf("arg %q: %s", argName, err)
 		}
 	}
@@ -186,18 +165,15 @@ func (m *Meta) VerifyEvent(name string, args interface{}) error {
 	return nil
 }
 
-func (m *Meta) VerifyMethodArgs(name string, args interface{}) error {
+func (m *Meta) VerifyMethodArgs(name string, args message.Args) error {
 	index, seen := m.methodIndex[name]
 	if !seen {
 		return fmt.Errorf("NO method %q", name)
 	}
 
-	Type := reflect.TypeOf(args)
-	Value := reflect.ValueOf(args)
-
-	// 1.参数args一定要是对象类型
-	if Type.Kind() != reflect.Struct {
-		return fmt.Errorf("args: NOT an struct")
+	// 参数不能为空
+	if args == nil {
+		return fmt.Errorf("nil method args")
 	}
 
 	// 2.每个参数是否匹配
@@ -206,33 +182,14 @@ func (m *Meta) VerifyMethodArgs(name string, args interface{}) error {
 	for _, argMeta := range m.Method[index].Args {
 		argName := *argMeta.Name
 
-		var fieldType reflect.StructField
-		var found bool = false
-
 		// a.参数存在性
-		// 查找json标签为fieldName的字段类型
-		for j := 0; j < Type.NumField(); j++ {
-			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
-				if tag == argName {
-					fieldType = Type.Field(j)
-					found = true
-					break
-				}
-			}
-		}
-
-		// NOTE: 字段一定是导出的
-		if found {
-			if fieldType.PkgPath != "" {
-				return fmt.Errorf("arg %q: unexported", argName)
-			}
-		} else {
+		value, seen := args[argName]
+		if !seen {
 			return fmt.Errorf("arg %q: missing", argName)
 		}
 
 		// b.参数值一致性
-		fieldValue := Value.FieldByName(fieldType.Name)
-		if err := verifyData(argMeta, fieldValue.Interface()); err != nil {
+		if err := verifyData(argMeta, value); err != nil {
 			return fmt.Errorf("arg %q: %s", argName, err)
 		}
 	}
@@ -240,18 +197,15 @@ func (m *Meta) VerifyMethodArgs(name string, args interface{}) error {
 	return nil
 }
 
-func (m *Meta) VerifyMethodResp(name string, resp interface{}) error {
+func (m *Meta) VerifyMethodResp(name string, resp message.Resp) error {
 	index, seen := m.methodIndex[name]
 	if !seen {
 		return fmt.Errorf("NO method %q", name)
 	}
 
-	Type := reflect.TypeOf(resp)
-	Value := reflect.ValueOf(resp)
-
-	// 1.参数args一定要是对象类型
-	if Type.Kind() != reflect.Struct {
-		return fmt.Errorf("response: NOT an struct")
+	// 返回值不能为空
+	if resp == nil {
+		return fmt.Errorf("nil method response")
 	}
 
 	// 2.每个返回值是否匹配
@@ -260,33 +214,14 @@ func (m *Meta) VerifyMethodResp(name string, resp interface{}) error {
 	for _, respMeta := range m.Method[index].Response {
 		respName := *respMeta.Name
 
-		var fieldType reflect.StructField
-		var found bool = false
-
 		// a.参数存在性
-		// 查找json标签为fieldName的字段类型
-		for j := 0; j < Type.NumField(); j++ {
-			if tag, ok := Type.Field(j).Tag.Lookup("json"); ok {
-				if tag == respName {
-					fieldType = Type.Field(j)
-					found = true
-					break
-				}
-			}
-		}
-
-		// NOTE: 字段一定是导出的
-		if found {
-			if fieldType.PkgPath != "" {
-				return fmt.Errorf("response %q: unexported", respName)
-			}
-		} else {
+		value, seen := resp[respName]
+		if !seen {
 			return fmt.Errorf("response %q: missing", respName)
 		}
 
 		// b.参数值一致性
-		fieldValue := Value.FieldByName(fieldType.Name)
-		if err := verifyData(respMeta, fieldValue.Interface()); err != nil {
+		if err := verifyData(respMeta, value); err != nil {
 			return fmt.Errorf("response %q: %s", respName, err)
 		}
 	}
@@ -437,6 +372,26 @@ func verifyFloatData(meta ParamMeta, data interface{}, checkRange bool) error {
 		value = data.(float64)
 	case float32:
 		value = float64(data.(float32))
+	case int:
+		value = float64(data.(int))
+	case int8:
+		value = float64(data.(int8))
+	case int16:
+		value = float64(data.(int16))
+	case int32:
+		value = float64(data.(int32))
+	case int64:
+		value = float64(data.(int64))
+	case uint:
+		value = float64(data.(uint))
+	case uint8:
+		value = float64(data.(uint8))
+	case uint16:
+		value = float64(data.(uint16))
+	case uint32:
+		value = float64(data.(uint32))
+	case uint64:
+		value = float64(data.(uint64))
 	default:
 		return fmt.Errorf("type unmatched")
 	}

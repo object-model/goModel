@@ -4,6 +4,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
+	"proxy/message"
 	"testing"
 )
 
@@ -1804,135 +1805,115 @@ func TestMeta_VerifyEventError(t *testing.T) {
 
 	testCases := []struct {
 		name   string
-		args   interface{}
+		args   message.Args
 		errStr string
 		desc   string
 	}{
 		{
 			name:   "unknown",
-			args:   "null",
+			args:   message.Args{},
 			errStr: "NO event \"unknown\"",
 			desc:   "不存在的事件",
 		},
 
 		{
-			name:   "qsMotorOverCur",
-			args:   "hello",
-			errStr: "args: NOT an struct",
-			desc:   "事件参数类型不匹配",
+			name:   "qsAction",
+			args:   nil,
+			errStr: "nil event args",
+			desc:   "事件参数缺失",
 		},
 
 		{
-			name: "qsAction",
-			args: struct {
-			}{},
+			name:   "qsAction",
+			args:   message.Args{},
 			errStr: "arg \"motors\": missing",
 			desc:   "事件参数缺失",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]float32
-			}{},
-			errStr: "arg \"motors\": missing",
-			desc:   "事件参数缺失--没有json标签",
-		},
-
-		{
-			name: "qsAction",
-			args: struct {
-				motors [4]float32 `json:"motors"`
-			}{},
-			errStr: "arg \"motors\": unexported",
-			desc:   "事件参数为非导出字段",
-		},
-
-		{
-			name: "qsAction",
-			args: struct {
-				Motors []int `json:"motors"`
-			}{},
+			args: message.Args{
+				"motors": make([]float64, 4),
+			},
 			errStr: "arg \"motors\": type unmatched",
 			desc:   "事件参数类型不匹配",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [5]struct {
-				} `json:"motors"`
-			}{},
+			args: message.Args{
+				"motors": [5]struct{}{},
+			},
 			errStr: "arg \"motors\": length NOT equal to 4",
 			desc:   "数组类型的事件参数长度不匹配",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
-				} `json:"motors"`
-			}{},
+			args: message.Args{
+				"motors": [4]struct {
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"rov\": missing",
 			desc:   "事件参数的子字段缺失",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
+			args: message.Args{
+				"motors": [4]struct {
 					rov int `json:"rov"`
-				} `json:"motors"`
-			}{},
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"rov\": unexported",
 			desc:   "事件参数的子字段非导出",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
+			args: message.Args{
+				"motors": [4]struct {
 					Rov uint `json:"rov"`
-				} `json:"motors"`
-			}{},
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"rov\": type unmatched",
 			desc:   "事件参数的子字段类型不匹配-rov为uint",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
+			args: message.Args{
+				"motors": [4]struct {
 					Rov int16   `json:"rov"`
 					Cur float64 `json:"cur"`
-				} `json:"motors"`
-			}{},
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"cur\": type unmatched",
 			desc:   "事件参数的子字段类型不匹配-cur为float",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
+			args: message.Args{
+				"motors": [4]struct {
 					Rov  int16  `json:"rov"`
 					Cur  int32  `json:"cur"`
 					Temp string `json:"temp"`
-				} `json:"motors"`
-			}{},
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"temp\": type unmatched",
 			desc:   "事件参数的子字段类型不匹配-temp为string",
 		},
 
 		{
 			name: "qsAction",
-			args: struct {
-				Motors [4]struct {
-					Rov  int64   `json:"rov"`
-					Cur  int32   `json:"cur"`
+			args: message.Args{
+				"motors": [4]struct {
+					Rov  int16   `json:"rov"`
+					Cur  int8    `json:"cur"`
 					Temp float32 `json:"temp"`
-				} `json:"motors"`
-			}{},
+				}{},
+			},
 			errStr: "arg \"motors\": element: field \"temp\": type unmatched",
 			desc:   "事件参数的子字段类型不匹配-temp为float32",
 		},
@@ -1955,29 +1936,22 @@ func TestMeta_VerifyEventOK(t *testing.T) {
 
 	type TestCase struct {
 		Name string
-		Args interface{}
+		Args message.Args
 		Desc string
 	}
 
 	testCases := []TestCase{
 		{
 			Name: "qsMotorOverCur",
-			Args: struct{}{},
+			Args: message.Args{},
 			Desc: "正常事件参数1",
 		},
 
 		{
 			Name: "qsAction",
-			Args: struct {
-				Motors [4]struct {
-					Rov  int   `json:"rov"`
-					Cur  int32 `json:"cur"`
-					Temp int8  `json:"temp"`
-				} `json:"motors"`
-				QsAngle float32 `json:"qsAngle"`
-			}{
-				Motors: [4]struct {
-					Rov  int   `json:"rov"`
+			Args: message.Args{
+				"motors": [4]struct {
+					Rov  int64 `json:"rov"`
 					Cur  int32 `json:"cur"`
 					Temp int8  `json:"temp"`
 				}{
@@ -2006,7 +1980,7 @@ func TestMeta_VerifyEventOK(t *testing.T) {
 					},
 				},
 
-				QsAngle: 89.6,
+				"qsAngle": 89.6,
 			},
 			Desc: "正常事件参数2",
 		},
@@ -2028,7 +2002,7 @@ func TestMeta_VerifyMethodArgsError(t *testing.T) {
 
 	type TestCase struct {
 		name   string
-		args   interface{}
+		args   message.Args
 		errStr string
 		desc   string
 	}
@@ -2036,40 +2010,38 @@ func TestMeta_VerifyMethodArgsError(t *testing.T) {
 	testCases := []TestCase{
 		{
 			name:   "unknown",
-			args:   123,
+			args:   nil,
 			errStr: "NO method \"unknown\"",
 			desc:   "方法名不存在",
 		},
 
 		{
 			name:   "QS",
-			args:   3.14,
-			errStr: "args: NOT an struct",
-			desc:   "方法参数不是结构体类型",
+			args:   nil,
+			errStr: "nil method args",
+			desc:   "nil类型的方法参数",
 		},
 
 		{
 			name:   "QS",
-			args:   struct{}{},
+			args:   message.Args{},
 			errStr: "arg \"angle\": missing",
 			desc:   "方法参数中缺失字段",
 		},
 
 		{
 			name: "QS",
-			args: struct {
-				angle float64 `json:"angle"`
-			}{},
-			errStr: "arg \"angle\": unexported",
-			desc:   "方法参数中字段为私有字段",
+			args: message.Args{
+				"angle": "123",
+			},
+			errStr: "arg \"angle\": type unmatched",
+			desc:   "方法参数中字段类型不匹配",
 		},
 
 		{
 			name: "QS",
-			args: struct {
-				Angle float64 `json:"angle"`
-			}{
-				Angle: -1.0,
+			args: message.Args{
+				"angle": int8(-1),
 			},
 			errStr: "arg \"angle\": less than min",
 			desc:   "方法参数中字段小于最小值",
@@ -2077,10 +2049,8 @@ func TestMeta_VerifyMethodArgsError(t *testing.T) {
 
 		{
 			name: "QS",
-			args: struct {
-				Angle float64 `json:"angle"`
-			}{
-				Angle: 91.0001,
+			args: message.Args{
+				"angle": 91.0001,
 			},
 			errStr: "arg \"angle\": greater than max",
 			desc:   "方法参数中字段大于最大值",
@@ -2088,12 +2058,18 @@ func TestMeta_VerifyMethodArgsError(t *testing.T) {
 
 		{
 			name: "QS",
-			args: struct {
-				Angle float64 `json:"angle"`
-				Speed string  `json:"speed"`
-			}{
-				Angle: 90,
-				Speed: "unknown",
+			args: message.Args{
+				"angle": 92,
+			},
+			errStr: "arg \"angle\": greater than max",
+			desc:   "方法参数中字段大于最大值(类型兼容)",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": 90.000,
+				"speed": "unknown",
 			},
 			errStr: "arg \"speed\": \"unknown\" NOT in option",
 			desc:   "方法参数中字段不在可选项中",
@@ -2118,45 +2094,90 @@ func TestMeta_VerifyMethodArgsOK(t *testing.T) {
 
 	type TestCase struct {
 		name string
-		args interface{}
+		args message.Args
 		desc string
 	}
 
 	testCases := []TestCase{
 		{
 			name: "QS",
-			args: struct {
-				Angle float64 `json:"angle"`
-				Speed string  `json:"speed"`
-			}{
-				Angle: 90,
-				Speed: "fast",
+			args: message.Args{
+				"angle": 90,
+				"speed": "fast",
 			},
 			desc: "正常方法参数1",
 		},
 
 		{
 			name: "QS",
-			args: struct {
-				Angle float32 `json:"angle"`
-				Speed string  `json:"speed"`
-			}{
-				Angle: 91.000,
-				Speed: "middle",
+			args: message.Args{
+				"angle": int16(91),
+				"speed": "middle",
 			},
 			desc: "正常方法参数2",
 		},
 
 		{
 			name: "QS",
-			args: struct {
-				Angle float32 `json:"angle"`
-				Speed string  `json:"speed"`
-			}{
-				Angle: 0.000,
-				Speed: "slow",
+			args: message.Args{
+				"angle": uint64(0),
+				"speed": "slow",
 			},
 			desc: "正常方法参数3",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": uint8(0),
+				"speed": "slow",
+			},
+			desc: "正常方法参数4",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": uint16(89),
+				"speed": "slow",
+			},
+			desc: "正常方法参数5",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": uint32(89),
+				"speed": "slow",
+			},
+			desc: "正常方法参数6",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": uint(89),
+				"speed": "slow",
+			},
+			desc: "正常方法参数6",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": int32(89),
+				"speed": "slow",
+			},
+			desc: "正常方法参数7",
+		},
+
+		{
+			name: "QS",
+			args: message.Args{
+				"angle": int64(89),
+				"speed": "slow",
+			},
+			desc: "正常方法参数8",
 		},
 	}
 
@@ -2176,7 +2197,7 @@ func TestMeta_VerifyMethodRespError(t *testing.T) {
 
 	type TestCase struct {
 		name   string
-		resp   interface{}
+		resp   message.Resp
 		errStr string
 		desc   string
 	}
@@ -2184,47 +2205,32 @@ func TestMeta_VerifyMethodRespError(t *testing.T) {
 	testCases := []TestCase{
 		{
 			name:   "unknown",
-			resp:   123,
+			resp:   message.Resp{},
 			errStr: "NO method \"unknown\"",
 			desc:   "方法名不存在",
 		},
 
 		{
 			name:   "QS",
-			resp:   3.14,
-			errStr: "response: NOT an struct",
-			desc:   "方法返回值不是结构体类型",
+			resp:   nil,
+			errStr: "nil method response",
+			desc:   "方法返回值不是nil",
 		},
 
 		{
 			name:   "QS",
-			resp:   struct{}{},
+			resp:   message.Resp{},
 			errStr: "response \"res\": missing",
 			desc:   "方法返回值中缺失字段",
 		},
 
 		{
 			name: "QS",
-			resp: struct {
-				Res bool   `json:"res"`
-				msg string `json:"msg"`
-			}{},
-			errStr: "response \"msg\": unexported",
-			desc:   "方法返回值中为私有字段",
-		},
-
-		{
-			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint32 `json:"time"`
-				Code int8   `json:"code"`
-			}{
-				Res:  false,
-				Time: 100001,
-				Msg:  "执行失败",
-				Code: 1,
+			resp: message.Resp{
+				"res":  false,
+				"time": uint(100001),
+				"msg":  "执行失败",
+				"code": 1,
 			},
 			errStr: "response \"time\": greater than max",
 			desc:   "方法返回值中的字段大于最大值",
@@ -2232,16 +2238,11 @@ func TestMeta_VerifyMethodRespError(t *testing.T) {
 
 		{
 			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint16 `json:"time"`
-				Code int    `json:"code"`
-			}{
-				Res:  true,
-				Time: 1,
-				Msg:  "执行成功",
-				Code: 4,
+			resp: message.Resp{
+				"res":  true,
+				"time": uint8(1),
+				"msg":  "执行成功",
+				"code": 4,
 			},
 			errStr: "response \"code\": 4 NOT in option",
 			desc:   "方法返回值中的字段不在可选项中",
@@ -2265,7 +2266,7 @@ func TestMeta_VerifyMethodRespOK(t *testing.T) {
 
 	type TestCase struct {
 		name string
-		resp interface{}
+		resp message.Resp
 		desc string
 	}
 
@@ -2273,64 +2274,44 @@ func TestMeta_VerifyMethodRespOK(t *testing.T) {
 
 		{
 			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint32 `json:"time"`
-				Code int8   `json:"code"`
-			}{
-				Res:  false,
-				Time: 100000,
-				Msg:  "执行失败",
-				Code: 1,
+			resp: message.Resp{
+				"res":  false,
+				"time": uint32(100000),
+				"msg":  "执行失败",
+				"code": 1,
 			},
 			desc: "正常方法返回值1",
 		},
 
 		{
 			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint16 `json:"time"`
-				Code int    `json:"code"`
-			}{
-				Res:  true,
-				Time: 0,
-				Msg:  "执行成功",
-				Code: 0,
+			resp: message.Resp{
+				"res":  true,
+				"time": uint8(0),
+				"msg":  "执行成功",
+				"code": 0,
 			},
 			desc: "正常方法返回值2",
 		},
 
 		{
 			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint8  `json:"time"`
-				Code int    `json:"code"`
-			}{
-				Res:  true,
-				Time: 255,
-				Msg:  "执行成功",
-				Code: 2,
+			resp: message.Resp{
+				"res":  true,
+				"time": uint16(255),
+				"msg":  "执行成功",
+				"code": 2,
 			},
 			desc: "正常方法返回值3",
 		},
 
 		{
 			name: "QS",
-			resp: struct {
-				Res  bool   `json:"res"`
-				Msg  string `json:"msg"`
-				Time uint64 `json:"time"`
-				Code int    `json:"code"`
-			}{
-				Res:  true,
-				Time: 65536,
-				Msg:  "执行成功",
-				Code: 3,
+			resp: message.Resp{
+				"res":  true,
+				"time": uint64(65536),
+				"msg":  "执行成功",
+				"code": 3,
 			},
 			desc: "正常方法返回值4",
 		},
