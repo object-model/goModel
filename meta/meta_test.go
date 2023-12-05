@@ -1606,7 +1606,7 @@ func TestMeta_VerifyStateMetaError(t *testing.T) {
 				Name: "meta-info",
 			},
 			ErrStr: "root: description is empty",
-			Desc:   "元信息name为空",
+			Desc:   "元信息description为空",
 		},
 
 		{
