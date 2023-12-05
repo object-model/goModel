@@ -1,6 +1,7 @@
 package meta
 
 import (
+	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"testing"
@@ -1326,6 +1327,10 @@ func TestParseOk(t *testing.T) {
 	assert.EqualValues(t, []string{
 		"A/car/#1/tpqs/QS",
 	}, m.AllMethods())
+
+	data, err := jsoniter.Marshal(m)
+	assert.Nil(t, err)
+	assert.Equal(t, data, m.ToJSON())
 }
 
 func TestMeta_VerifyStateError(t *testing.T) {

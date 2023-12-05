@@ -232,12 +232,7 @@ func EncodeQueryMetaMsg() []byte {
 
 // EncodeMetaMsg 编码一个物模型元信息JSON报文,返回JSON编码后的全报文数据和错误信息
 func EncodeMetaMsg(meta meta.Meta) ([]byte, error) {
-	payload, err := jsoniter.Marshal(meta)
-	if err != nil {
-		return nil, err
-	}
-
-	return EncodeMsg("meta-info", payload)
+	return EncodeMsg("meta-info", meta.ToJSON())
 }
 
 // EncodeMsg 编码一个报文类型为Type,报文数据域为payload的JSON报文,

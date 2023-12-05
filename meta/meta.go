@@ -6,6 +6,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 var validType = map[string]struct{}{
@@ -68,10 +69,14 @@ type Meta struct {
 	stateIndex    map[string]int // 状态名称索引
 	eventIndex    map[string]int // 事件名称索引
 	methodIndex   map[string]int // 方法名称索引
+
+	json       []byte    // 缓存元信息序列化后的JSON串
+	encodeOnce sync.Once // 只序列化一次
 }
 
 type TemplateParam map[string]string
 
+// AllStates 返回物模型元信息m中的所有状态全名.
 func (m *Meta) AllStates() []string {
 	res := make([]string, 0, len(m.State))
 	for i := range m.State {
@@ -83,6 +88,7 @@ func (m *Meta) AllStates() []string {
 	return res
 }
 
+// AllEvents 返回物模型元信息m中的所有事件全名.
 func (m *Meta) AllEvents() []string {
 	res := make([]string, 0, len(m.Event))
 	for i := range m.Event {
@@ -94,6 +100,7 @@ func (m *Meta) AllEvents() []string {
 	return res
 }
 
+// AllMethods 返回物模型元信息m中的所有方法全名.
 func (m *Meta) AllMethods() []string {
 	res := make([]string, 0, len(m.Method))
 	for i := range m.Method {
@@ -103,6 +110,18 @@ func (m *Meta) AllMethods() []string {
 		}, "/"))
 	}
 	return res
+}
+
+// ToJSON 将物模型元信息m序列化JSON串.
+func (m *Meta) ToJSON() []byte {
+	m.encodeOnce.Do(func() {
+		data, err := jsoniter.Marshal(m)
+		if err != nil {
+			panic(err)
+		}
+		m.json = data
+	})
+	return m.json
 }
 
 func (m *Meta) VerifyState(name string, data interface{}) error {
