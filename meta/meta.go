@@ -594,12 +594,7 @@ func verifyMetaData(data interface{}) error {
 		return fmt.Errorf("type unmatched")
 	}
 
-	jsonData, err := jsoniter.Marshal(meta)
-	if err != nil {
-		return fmt.Errorf("invalid meta")
-	}
-
-	_, err = Parse(jsonData, nil)
+	_, err := Parse(meta.ToJSON(), nil)
 	return err
 }
 
