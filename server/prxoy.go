@@ -40,30 +40,27 @@ type querySubReq struct {
 	ResChan   chan querySubRes
 }
 
-func (s *Server) dealProxyCall(call message.CallMessage, conn connection) {
+func (s *Server) dealProxyCall(call callMessage, conn connection) {
 	resp := message.Resp{}
-	err := ""
+	errStr := ""
 	switch call.Method {
 	case "GetAllModel":
-		resp, err = s.getAllModel()
+		resp, errStr = s.getAllModel()
 	case "GetModel":
-		resp, err = s.getModel(call.Args)
+		resp, errStr = s.getModel(call.Args)
 	case "ModelIsOnline":
-		resp, err = s.modelIsOnline(call.Args)
+		resp, errStr = s.modelIsOnline(call.Args)
 	case "GetSubState":
-		resp, err = s.getSubList(call.Args, s.querySubState)
+		resp, errStr = s.getSubList(call.Args, s.querySubState)
 	case "GetSubEvent":
-		resp, err = s.getSubList(call.Args, s.querySubEvent)
+		resp, errStr = s.getSubList(call.Args, s.querySubEvent)
 	default:
-		err = fmt.Sprintf("NO method %q in proxy", call.Method)
+		errStr = fmt.Sprintf("NO method %q in proxy", call.Method)
 	}
-
-	// 编码响应
-	respData := message.NewResponseFullData(call.UUID, err, resp)
 
 	// 发送响应
 	select {
-	case conn.writeChan <- respData:
+	case conn.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, errStr, resp)):
 	case <-conn.writerQuit:
 		return
 	}
@@ -155,32 +152,12 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 		EventName = "proxy/online"
 	}
 
-	args := map[string]interface{}{
+	fullData := message.Must(message.EncodeEventMsg(EventName, message.Args{
 		"modelName": modelName,
 		"addr":      addr,
-	}
+	}))
 
-	eventPayload := message.EventPayload{
-		Name: EventName,
-		Args: args,
-	}
-
-	eventPayloadData, err := jsoniter.Marshal(eventPayload)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := message.Message{
-		Type:    "event",
-		Payload: eventPayloadData,
-	}
-
-	fullData, err := jsoniter.Marshal(msg)
-	if err != nil {
-		panic(err)
-	}
-
-	s.eventChan <- message.StateOrEventMessage{
+	s.eventChan <- stateOrEventMessage{
 		Source:   "proxy",
 		Name:     EventName,
 		FullData: fullData,
@@ -188,33 +165,13 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 }
 
 func (s *Server) pushMetaCheckErrorEvent(checkErr error, m *model) {
-	args := map[string]interface{}{
+	fullData := message.Must(message.EncodeEventMsg("metaCheckError", message.Args{
 		"modelName": m.MetaInfo.Name,
 		"addr":      m.RemoteAddr().String(),
 		"error":     checkErr.Error(),
-	}
+	}))
 
-	eventPayload := message.EventPayload{
-		Name: "metaCheckError",
-		Args: args,
-	}
-
-	eventPayloadData, err := jsoniter.Marshal(eventPayload)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := message.Message{
-		Type:    "event",
-		Payload: eventPayloadData,
-	}
-
-	fullData, err := jsoniter.Marshal(msg)
-	if err != nil {
-		panic(err)
-	}
-
-	event := message.StateOrEventMessage{
+	event := stateOrEventMessage{
 		Source:   "proxy",
 		Name:     "metaCheckError",
 		FullData: fullData,
@@ -231,32 +188,12 @@ func (s *Server) pushMetaCheckErrorEvent(checkErr error, m *model) {
 }
 
 func (s *Server) pushRepeatModelNameEvent(m *model) {
-	args := map[string]interface{}{
+	fullData := message.Must(message.EncodeEventMsg("repeatModelNameError", message.Args{
 		"modelName": m.MetaInfo.Name,
 		"addr":      m.RemoteAddr().String(),
-	}
+	}))
 
-	eventPayload := message.EventPayload{
-		Name: "repeatModelNameError",
-		Args: args,
-	}
-
-	eventPayloadData, err := jsoniter.Marshal(eventPayload)
-	if err != nil {
-		panic(err)
-	}
-
-	msg := message.Message{
-		Type:    "event",
-		Payload: eventPayloadData,
-	}
-
-	fullData, err := jsoniter.Marshal(msg)
-	if err != nil {
-		panic(err)
-	}
-
-	event := message.StateOrEventMessage{
+	event := stateOrEventMessage{
 		Source:   "proxy",
 		Name:     "repeatModelNameError",
 		FullData: fullData,

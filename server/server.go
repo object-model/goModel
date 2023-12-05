@@ -27,20 +27,20 @@ var upgrader = websocket.Upgrader{
 // 获取某个物模型的状态订阅列表方法、获取某个物模型的事件订阅列表方法.
 // 物模型可以通过tcp或websocket接口与代理服务器建立连接.
 type Server struct {
-	addConnChan    chan *model                         // 添加链路通道
-	removeConnChan chan *model                         // 删除链路通道
-	subStateChan   chan message.SubStateOrEventMessage // 订阅状态通道
-	subEventChan   chan message.SubStateOrEventMessage // 订阅事件通道
-	stateChan      chan message.StateOrEventMessage    // 状态报文通道
-	eventChan      chan message.StateOrEventMessage    // 事件报文通道
-	callChan       chan message.CallMessage            // 调用报文通道
-	respChan       chan message.ResponseMessage        // 响应报文通道
-	queryAllModel  chan chan []modelItem               // 查询在线模型通道
-	queryModel     chan queryModelReq                  // 查询指定模型通道
-	queryOnline    chan queryOnlineReq                 // 查询模型是否在线通道
-	querySubState  chan querySubReq                    // 查询模型的状态订阅关系
-	querySubEvent  chan querySubReq                    // 查询模型的事件订阅关系
-	log            *log.Logger                         // 记录收发的数据
+	addConnChan    chan *model                 // 添加链路通道
+	removeConnChan chan *model                 // 删除链路通道
+	subStateChan   chan subStateOrEventMessage // 订阅状态通道
+	subEventChan   chan subStateOrEventMessage // 订阅事件通道
+	stateChan      chan stateOrEventMessage    // 状态报文通道
+	eventChan      chan stateOrEventMessage    // 事件报文通道
+	callChan       chan callMessage            // 调用报文通道
+	respChan       chan responseMessage        // 响应报文通道
+	queryAllModel  chan chan []modelItem       // 查询在线模型通道
+	queryModel     chan queryModelReq          // 查询指定模型通道
+	queryOnline    chan queryOnlineReq         // 查询模型是否在线通道
+	querySubState  chan querySubReq            // 查询模型的状态订阅关系
+	querySubEvent  chan querySubReq            // 查询模型的事件订阅关系
+	log            *log.Logger                 // 记录收发的数据
 }
 
 // New 创建一个数据日志写入对象为dataLogWriter的物模型代理服务器.
@@ -53,12 +53,12 @@ func New(dataLogWriter io.Writer) *Server {
 	s := &Server{
 		addConnChan:    make(chan *model),
 		removeConnChan: make(chan *model),
-		subStateChan:   make(chan message.SubStateOrEventMessage),
-		subEventChan:   make(chan message.SubStateOrEventMessage),
-		stateChan:      make(chan message.StateOrEventMessage),
-		eventChan:      make(chan message.StateOrEventMessage),
-		callChan:       make(chan message.CallMessage),
-		respChan:       make(chan message.ResponseMessage),
+		subStateChan:   make(chan subStateOrEventMessage),
+		subEventChan:   make(chan subStateOrEventMessage),
+		stateChan:      make(chan stateOrEventMessage),
+		eventChan:      make(chan stateOrEventMessage),
+		callChan:       make(chan callMessage),
+		respChan:       make(chan responseMessage),
 		queryAllModel:  make(chan chan []modelItem),
 		queryModel:     make(chan queryModelReq),
 		queryOnline:    make(chan queryOnlineReq),
@@ -144,12 +144,12 @@ func (s *Server) run() {
 			onResp(connections, resp, respWaiters)
 		case subStateReq := <-s.subStateChan:
 			if conn, seen := connections[subStateReq.Source]; seen {
-				conn.pubStates = message.UpdatePubTable(subStateReq, conn.pubStates)
+				conn.pubStates = updatePubTable(subStateReq, conn.pubStates)
 				connections[subStateReq.Source] = conn
 			}
 		case subEventReq := <-s.subEventChan:
 			if conn, seen := connections[subEventReq.Source]; seen {
-				conn.pubEvents = message.UpdatePubTable(subEventReq, conn.pubEvents)
+				conn.pubEvents = updatePubTable(subEventReq, conn.pubEvents)
 				connections[subEventReq.Source] = conn
 			}
 		case m := <-s.addConnChan:
@@ -171,7 +171,7 @@ func (s *Server) run() {
 	}
 }
 
-func (s *Server) onCall(call message.CallMessage,
+func (s *Server) onCall(call callMessage,
 	connections map[string]connection,
 	respWaiters map[string]string) {
 	if call.Model == "proxy" {
@@ -185,7 +185,7 @@ func (s *Server) onCall(call message.CallMessage,
 		// 期望调用的物模型不存在，直接返回错误响应
 		errStr := fmt.Sprintf("model %q NOT exist", call.Model)
 		resp := make(map[string]interface{})
-		connections[call.Source].writeChan <- message.NewResponseFullData(call.UUID, errStr, resp)
+		connections[call.Source].writeChan <- message.Must(message.EncodeRespMsg(call.UUID, errStr, resp))
 		return
 	}
 
@@ -198,7 +198,7 @@ func (s *Server) onCall(call message.CallMessage,
 	connections[call.Source].outCalls[call.UUID] = struct{}{}
 }
 
-func onResp(connections map[string]connection, resp message.ResponseMessage,
+func onResp(connections map[string]connection, resp responseMessage,
 	respWaiters map[string]string) {
 	// 不是在编的物模型连接发送的调用请求不响应
 	if srcConn, seen := connections[resp.Source]; !seen {
@@ -226,11 +226,11 @@ func (s *Server) onAddConn(connections map[string]connection, m *model) {
 		return
 	}
 	// 订阅所有状态
-	data, _ := message.NewPubStateMessage(message.SetSub, m.MetaInfo.AllStates())
+	data, _ := message.EncodeSubStateMsg(message.SetSub, m.MetaInfo.AllStates())
 	m.writeChan <- data
 
 	// 订阅所有事件
-	data, _ = message.NewPubEventMessage(message.SetSub, m.MetaInfo.AllEvents())
+	data, _ = message.EncodeSubEventMsg(message.SetSub, m.MetaInfo.AllEvents())
 	m.writeChan <- data
 
 	conn := connection{
@@ -260,7 +260,7 @@ func (s *Server) onRemoveConn(connections map[string]connection, m *model,
 		empty := make(map[string]interface{})
 		for uuid := range conn.inCalls {
 			if destConn, ok := connections[respWaiters[uuid]]; ok {
-				destConn.writeChan <- message.NewResponseFullData(uuid, errStr, empty)
+				destConn.writeChan <- message.Must(message.EncodeRespMsg(uuid, errStr, empty))
 			}
 		}
 
@@ -399,4 +399,26 @@ func (s *Server) addModelConnection(conn ModelConn) {
 
 	// 添加链路
 	s.addConnChan <- ans
+}
+
+func updatePubTable(req subStateOrEventMessage, pubSet map[string]struct{}) map[string]struct{} {
+	switch req.Type {
+	case message.SetSub:
+		pubSet = make(map[string]struct{})
+		for _, sub := range req.Items {
+			pubSet[sub] = struct{}{}
+		}
+	case message.AddSub:
+		for _, sub := range req.Items {
+			pubSet[sub] = struct{}{}
+		}
+	case message.RemoveSub:
+		for _, sub := range req.Items {
+			delete(pubSet, sub)
+		}
+	case message.ClearSub:
+		pubSet = make(map[string]struct{})
+	}
+
+	return pubSet
 }

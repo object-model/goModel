@@ -411,6 +411,10 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 更新日志
 
+## 20231205
+
+1. 优化程序模块划分，将所有物模型报文的编码都整合到message中，将不属于message的部分移动到别处
+
 ## 20231203
 
 1. 物模型元信息解析失败返回一个包含uuid模板的空的物模型

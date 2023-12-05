@@ -13,12 +13,6 @@ import (
 	"time"
 )
 
-var queryMetaJSON = strings.Join(strings.Fields(`
-{
-	"type": "query-meta",
-	"payload": null
-}`), "")
-
 type ModelConn interface {
 	Close() error
 	RemoteAddr() net.Addr
@@ -36,33 +30,60 @@ type msg struct {
 	fullData []byte
 }
 
+type stateOrEventMessage struct {
+	Source   string // 发送者的物模型名称
+	Name     string // 状态或者事件名称
+	FullData []byte // 全报文原始数据，是Message类型序列化的结果
+}
+
+type callMessage struct {
+	Source   string                         // 调用者的模型名
+	Model    string                         // 调用目标的模型名
+	Method   string                         // 调用目标的方法名
+	UUID     string                         // 调用UUID
+	Args     map[string]jsoniter.RawMessage // 调用参数
+	FullData []byte                         // 全报文原始数据，是Message类型序列化的结果
+}
+
+type responseMessage struct {
+	Source   string // 发送响应报文的模型名
+	UUID     string // 调用UUID
+	FullData []byte // 全报文原始数据，是Message类型序列化的结果
+}
+
+type subStateOrEventMessage struct {
+	Source string   // 发送者的物模型名称
+	Type   int      // 订阅类型
+	Items  []string // 状态或者事件列表
+}
+
 type model struct {
-	ModelConn                                             // 原始连接
-	bufferQuit      chan struct{}                         // 退出 bufferMsgHandler 的信号
-	writerQuit      chan struct{}                         // 退出 writer 的信号
-	added           chan struct{}                         // 连接已经加入 Server 信号
-	removeConnCh    chan<- *model                         // 删除连接通道
-	stateBroadcast  chan<- message.StateOrEventMessage    // 状态广播通道
-	eventBroadcast  chan<- message.StateOrEventMessage    // 事件广播通道
-	callChan        chan<- message.CallMessage            // 调用请求通道
-	respChan        chan<- message.ResponseMessage        // 响应结果通道
-	subStateChan    chan<- message.SubStateOrEventMessage // 更新状态订阅写入通道
-	subEventChan    chan<- message.SubStateOrEventMessage // 更新事件订阅写入通道
-	writeChan       chan []byte                           // 数据写入通道
-	metaGotChan     chan struct{}                         // 收到元信息消息通道
-	queryOnce       sync.Once                             // 保证只查询一次元信息
-	onGetMetaOnce   sync.Once                             // 保证只响应一次元信息结果报文
-	bufferQuitOnce  sync.Once                             // 保证 bufferQuit 只关闭一次
-	quitWriterOnce  sync.Once                             // 保证 writerQuit 只关闭一次
-	addedOnce       sync.Once                             // 保证 added 只关闭一次
-	MetaInfo        meta.Meta                             // 元信息
-	MetaRaw         []byte                                // 原始的元信息
-	log             *log.Logger                           // 记录收发数据
-	bufferCloseOnce sync.Once                             // 保证buffer仅关闭一次
-	buffer          chan msg                              // 挂起的报文
-	bufferDone      chan struct{}                         // 挂起报文处理完成信号
-	bufferErr       chan struct{}                         // 挂起报文处理出错信号
-	bufferExit      chan struct{}                         // bufferMsgHandler 退出信号
+	ModelConn                                     // 原始连接
+	bufferQuit      chan struct{}                 // 退出 bufferMsgHandler 的信号
+	writerQuit      chan struct{}                 // 退出 writer 的信号
+	added           chan struct{}                 // 连接已经加入 Server 信号
+	removeConnCh    chan<- *model                 // 删除连接通道
+	stateBroadcast  chan<- stateOrEventMessage    // 状态广播通道
+	eventBroadcast  chan<- stateOrEventMessage    // 事件广播通道
+	callChan        chan<- callMessage            // 调用请求通道
+	respChan        chan<- responseMessage        // 响应结果通道
+	subStateChan    chan<- subStateOrEventMessage // 更新状态订阅写入通道
+	subEventChan    chan<- subStateOrEventMessage // 更新事件订阅写入通道
+	writeChan       chan []byte                   // 数据写入通道
+	metaGotChan     chan struct{}                 // 收到元信息消息通道
+	queryOnce       sync.Once                     // 保证只查询一次元信息
+	onGetMetaOnce   sync.Once                     // 保证只响应一次元信息结果报文
+	bufferQuitOnce  sync.Once                     // 保证 bufferQuit 只关闭一次
+	quitWriterOnce  sync.Once                     // 保证 writerQuit 只关闭一次
+	addedOnce       sync.Once                     // 保证 added 只关闭一次
+	MetaInfo        meta.Meta                     // 元信息
+	MetaRaw         []byte                        // 原始的元信息
+	log             *log.Logger                   // 记录收发数据
+	bufferCloseOnce sync.Once                     // 保证buffer仅关闭一次
+	buffer          chan msg                      // 挂起的报文
+	bufferDone      chan struct{}                 // 挂起报文处理完成信号
+	bufferErr       chan struct{}                 // 挂起报文处理出错信号
+	bufferExit      chan struct{}                 // bufferMsgHandler 退出信号
 }
 
 func (m *model) Close() error {
@@ -100,7 +121,7 @@ func (m *model) isAdded() bool {
 
 func (m *model) queryMeta(timeout time.Duration) error {
 	m.queryOnce.Do(func() {
-		m.writeChan <- []byte(queryMetaJSON)
+		m.writeChan <- message.EncodeQueryMetaMsg()
 	})
 
 	select {
@@ -271,7 +292,7 @@ func (m *model) onSubState(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	m.subStateChan <- message.SubStateOrEventMessage{
+	m.subStateChan <- subStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
 		Items:  states,
@@ -298,7 +319,7 @@ func (m *model) onSubEvent(Type string, payload []byte) error {
 		option = message.ClearSub
 	}
 
-	m.subEventChan <- message.SubStateOrEventMessage{
+	m.subEventChan <- subStateOrEventMessage{
 		Source: m.MetaInfo.Name,
 		Type:   option,
 		Items:  events,
@@ -312,7 +333,7 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	m.stateBroadcast <- message.StateOrEventMessage{
+	m.stateBroadcast <- stateOrEventMessage{
 		Source:   m.MetaInfo.Name,
 		Name:     state.Name,
 		FullData: fullData,
@@ -326,7 +347,7 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	m.eventBroadcast <- message.StateOrEventMessage{
+	m.eventBroadcast <- stateOrEventMessage{
 		Source:   m.MetaInfo.Name,
 		Name:     event.Name,
 		FullData: fullData,
@@ -343,11 +364,11 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 	modelName, methodName, err := splitModelName(call.Name)
 	if err != nil {
 		resp := make(map[string]interface{})
-		m.writeChan <- message.NewResponseFullData(call.UUID, err.Error(), resp)
+		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, err.Error(), resp))
 		return nil
 	}
 
-	m.callChan <- message.CallMessage{
+	m.callChan <- callMessage{
 		Source:   m.MetaInfo.Name,
 		Model:    modelName,
 		Method:   methodName,
@@ -364,7 +385,7 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 		return err
 	}
 
-	m.respChan <- message.ResponseMessage{
+	m.respChan <- responseMessage{
 		Source:   m.MetaInfo.Name,
 		UUID:     resp.UUID,
 		FullData: fullData,

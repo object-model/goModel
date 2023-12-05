@@ -292,13 +292,8 @@ var proxyMetaMessage []byte
 var noneMetaMessage []byte
 
 func init() {
-	metaSendData, err := jsoniter.Marshal(message.Message{
-		Type:    "meta-info",
-		Payload: []byte(strings.Join(strings.Fields(ProxyMetaString), "")),
-	})
-	if err != nil {
-		panic(err)
-	}
+	metaSendData := message.Must(message.EncodeMsg("meta-info",
+		jsoniter.RawMessage(strings.Join(strings.Fields(ProxyMetaString), ""))))
 	proxyMetaMessage = metaSendData
 	noneMetaMessage = []byte(strings.Join(strings.Fields(NoneMetaString), ""))
 }
