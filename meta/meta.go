@@ -498,6 +498,94 @@ func (m *Meta) VerifyRawState(name string, data []byte) error {
 	}
 }
 
+// VerifyRawEvent 校验名为name事件原始参数为args的事件是否符合元信息m, 如果不符合返回错误原因.
+// VerifyRawEvent 一般用于校验从网络上接收的事件报文是否符合元信息,
+// VerifyEvent 一般用于推送事件前校验待推送的状态是否符合元信息.
+func (m *Meta) VerifyRawEvent(name string, args message.RawArgs) error {
+	// 1.事件存在性
+	index, seen := m.eventIndex[name]
+	if !seen {
+		return fmt.Errorf("NO event %q", name)
+	}
+
+	// 2.每个参数是否匹配
+	// NOTE: 元信息中每个参数一定要在args中存在，且字段值能匹配
+	// NOTE: args中多余的字段不判断, 保持一定的兼容能力
+	for _, argMeta := range m.Event[index].Args {
+		// a.参数存在性
+		argName := *argMeta.Name
+		arg, seen := args[argName]
+		if !seen {
+			return fmt.Errorf("arg %q: missing", argName)
+		}
+
+		// b.参数一致性
+		if err := verifyRawData(argMeta, arg); err != nil {
+			return fmt.Errorf("arg %q: %s", argName, err)
+		}
+
+	}
+	return nil
+}
+
+// VerifyRawMethodArgs 校验名为name调用请求原始参数为args的调用请求是否符合元信息m, 如果不符合返回错误原因.
+// VerifyRawMethodArgs 一般用于校验从网络上接收的调用请求报文是否符合元信息,
+// VerifyMethodArgs 一般用于发送调用请求前校验待发送的调用请求是否符合元信息.
+func (m *Meta) VerifyRawMethodArgs(name string, args message.RawArgs) error {
+	// 1.方法存在性
+	index, seen := m.methodIndex[name]
+	if !seen {
+		return fmt.Errorf("NO method %q", name)
+	}
+
+	// 2.每个参数是否匹配
+	// NOTE: 元信息中每个参数一定要在args中存在，且字段值能匹配
+	// NOTE: args中多余的字段不判断, 保持一定的兼容能力
+	for _, argMeta := range m.Method[index].Args {
+		// a.参数存在性
+		argName := *argMeta.Name
+		arg, seen := args[argName]
+		if !seen {
+			return fmt.Errorf("arg %q: missing", argName)
+		}
+
+		// b.参数一致性
+		if err := verifyRawData(argMeta, arg); err != nil {
+			return fmt.Errorf("arg %q: %s", argName, err)
+		}
+	}
+	return nil
+}
+
+// VerifyRawMethodResp 校验名为name调用响应原始返回值为response的调用响应是否符合元信息m, 如果不符合返回错误原因.
+// VerifyRawMethodResp 一般用于校验从网络上接收的调用响应报文是否符合元信息,
+// VerifyMethodResp 一般用于发送调用响应前校验待发送的调用响应是否符合元信息.
+func (m *Meta) VerifyRawMethodResp(name string, response message.RawResp) error {
+	// 1.方法存在性
+	index, seen := m.methodIndex[name]
+	if !seen {
+		return fmt.Errorf("NO method %q", name)
+	}
+
+	// 2.每个返回是否匹配
+	// NOTE: 元信息中每个返回值一定要在resp中存在，且字段值能匹配
+	// NOTE: resp中多余的字段不判断, 保持一定的兼容能力
+	for _, respMeta := range m.Method[index].Args {
+		// a.参数存在性
+		respName := *respMeta.Name
+		resp, seen := response[respName]
+		if !seen {
+			return fmt.Errorf("response %q: missing", respName)
+		}
+
+		// b.返回值一致性
+		if err := verifyRawData(respMeta, resp); err != nil {
+			return fmt.Errorf("response %q: %s", respName, err)
+		}
+	}
+	return nil
+}
+
 func verifyRawData(meta ParamMeta, data []byte) error {
 	// data必须是有效的JSON数据
 	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)

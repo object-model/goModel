@@ -430,6 +430,12 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 4. 使用和标准库完全兼容的解码方式
 
+5. 完成根据元信息校验原始事件参数的功能
+
+6. 完成根据元信息校验原始调用请求参数的功能
+
+7. 完成根据元信息校验原始调用响应返回值的功能
+
 ## 20231205
 
 1. 优化程序模块划分，将所有物模型报文的编码都整合到message中，将不属于message的部分移动到别处
