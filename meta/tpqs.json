@@ -136,6 +136,12 @@
           }
         ]
       }
+    },
+
+    {
+      "name": "QSCount",
+      "description": "起竖方法调用次数",
+      "type": "uint"
     }
   ],
   "event": [

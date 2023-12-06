@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
+	"io"
 	"proxy/message"
 	"reflect"
 	"strings"
@@ -499,9 +500,9 @@ func (m *Meta) VerifyRawState(name string, data []byte) error {
 
 func verifyRawData(meta ParamMeta, data []byte) error {
 	// data必须是有效的JSON数据
-	it := jsoniter.ParseBytes(jsoniter.ConfigDefault, data)
+	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
 	root := it.ReadAny()
-	if it.Error != nil || it.WhatIsNext() != jsoniter.InvalidValue {
+	if (it.Error != nil && it.Error != io.EOF) || it.WhatIsNext() != jsoniter.InvalidValue {
 		return fmt.Errorf("invalid JSON data")
 	}
 
@@ -652,7 +653,7 @@ func verifyRawStructData(meta ParamMeta, root jsoniter.Any) error {
 
 		field := root.Get(filedName)
 		if field.LastError() != nil {
-			return fmt.Errorf("field %q: missging", filedName)
+			return fmt.Errorf("field %q: missing", filedName)
 		}
 
 		// b.字段值也要匹配
@@ -826,9 +827,9 @@ func (m *Meta) setTemplate(param TemplateParam) (err error) {
 
 func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 	// 1. 读取
-	it := jsoniter.ParseBytes(jsoniter.ConfigDefault, rawData)
+	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, rawData)
 	root := it.ReadAny()
-	if it.Error != nil || it.WhatIsNext() != jsoniter.InvalidValue {
+	if (it.Error != nil && it.Error != io.EOF) || it.WhatIsNext() != jsoniter.InvalidValue {
 		return NewEmptyMeta(), fmt.Errorf("parse JSON failed")
 	}
 

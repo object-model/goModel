@@ -1153,6 +1153,12 @@ func TestParseOk(t *testing.T) {
 					},
 				},
 			},
+
+			{
+				Name:        newString("QSCount"),
+				Description: newString("起竖方法调用次数"),
+				Type:        "uint",
+			},
 		},
 		Event: []EventMeta{
 			{
@@ -1329,6 +1335,7 @@ func TestParseOk(t *testing.T) {
 			"tpqsInfo":  0,
 			"powerInfo": 1,
 			"gear":      2,
+			"QSCount":   3,
 		},
 
 		eventIndex: map[string]int{
@@ -1353,6 +1360,7 @@ func TestParseOk(t *testing.T) {
 		"A/car/#1/tpqs/tpqsInfo",
 		"A/car/#1/tpqs/powerInfo",
 		"A/car/#1/tpqs/gear",
+		"A/car/#1/tpqs/QSCount",
 	}, m.AllStates())
 
 	assert.EqualValues(t, []string{
@@ -2440,6 +2448,216 @@ func TestMeta_VerifyMethodRespOK(t *testing.T) {
 
 	for _, test := range testCases {
 		err = m.VerifyMethodResp(test.name, test.resp)
+		assert.Nil(t, err, test.desc)
+	}
+}
+
+func TestMeta_VerifyRawStateError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name   string
+		data   string
+		errStr string
+		desc   string
+	}
+
+	testCases := []TestCase{
+		{
+			name:   "unknown",
+			data:   `{}`,
+			errStr: "NO state \"unknown\"",
+			desc:   "不存在的状态",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{`,
+			errStr: "invalid JSON data",
+			desc:   "无效的JSON数据1",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{}[]`,
+			errStr: "invalid JSON data",
+			desc:   "无效的JSON数据2",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `123`,
+			errStr: "NOT struct",
+			desc:   "类型不匹配1",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `"123"`,
+			errStr: "NOT struct",
+			desc:   "类型不匹配2",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{}`,
+			errStr: "field \"qsState\": missing",
+			desc:   "struct类型缺失字段",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": 123}`,
+			errStr: "field \"qsState\": NOT string",
+			desc:   "struct类型的string类型的字段类型不匹配",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "unknown"}`,
+			errStr: "field \"qsState\": \"unknown\" NOT in option",
+			desc:   "struct类型中的string字段的值不在可选项中",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "uping", "hpSwitch": false, "qsAngle": -1}`,
+			errStr: "field \"qsAngle\": less than min",
+			desc:   "struct类型中的float字段的值小于最小值",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 201}`,
+			errStr: "field \"qsAngle\": greater than max",
+			desc:   "struct类型中的float字段的值大于最大值",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": {}}`,
+			errStr: "field \"errors\": NOT slice",
+			desc:   "要求是切片类型，收到的却是对象类型",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": [123]}`,
+			errStr: "field \"errors\": element[0]: NOT struct",
+			desc:   "slice类型数据的某一项的元素类型不匹配",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": [{"code": "123"}]}`,
+			errStr: "field \"errors\": element[0]: field \"code\": NOT number",
+			desc:   "要求uint类型的数据，收到的却是string",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": [{"code": 12.4}]}`,
+			errStr: "field \"errors\": element[0]: field \"code\": NOT uint",
+			desc:   "要求uint类型的数据，收到的却是浮点数",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": [{"code": -1}]}`,
+			errStr: "field \"errors\": element[0]: field \"code\": NOT uint",
+			desc:   "要求uint类型的数据，收到的却是负数",
+		},
+
+		{
+			name:   "tpqsInfo",
+			data:   `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": [{"code": 0}]}`,
+			errStr: "field \"errors\": element[0]: field \"code\": less than min",
+			desc:   "收到的uint类型数据小于最小值",
+		},
+
+		{
+			name:   "powerInfo",
+			data:   `{}`,
+			errStr: "NOT array",
+			desc:   "要求是数组类型，收到的却是对象类型",
+		},
+
+		{
+			name:   "powerInfo",
+			data:   `[{}, {}, {}, {}]`,
+			errStr: "length NOT equal to 8",
+			desc:   "收到的数组类型的数据其长度不对",
+		},
+
+		{
+			name:   "powerInfo",
+			data:   `[{"isOn": false, "outCur": 100000}, {"isOn": 123}, {}, {}, {}, {}, {}, {}]`,
+			errStr: "element[1]: field \"isOn\": NOT bool",
+			desc:   "要求是bool类型，收到的却是int类型",
+		},
+
+		{
+			name:   "powerInfo",
+			data:   `[{"isOn": false, "outCur": []}, {}, {}, {}, {}, {}, {}, {}]`,
+			errStr: "element[0]: field \"outCur\": NOT number",
+			desc:   "要求是float类型，收到的却是数组类型",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawState(test.name, []byte(test.data))
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+}
+
+func TestMeta_VerifyRawStateOk(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		data string
+		desc string
+	}
+
+	testCases := []TestCase{
+		{
+			name: "gear",
+			data: `0`,
+			desc: "uint类型的正常数据",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: `{"qsState": "downing", "hpSwitch": true, "qsAngle": 91, "errors": []}`,
+			desc: "长度为0的切片数据校验也能通过",
+		},
+
+		{
+			name: "powerInfo",
+			data: `[{"isOn": false, "outCur": 0}, {"isOn": false, "outCur": 100000}, {"isOn": false, "outCur": -100000}, {"isOn": true, "outCur": 100000.0}, {"isOn": true, "outCur": -100000.0}, {"isOn": false, "outCur": 99999}, {"isOn": true, "outCur": -99999.99}, {"isOn": true, "outCur": 99999.999}]`,
+			desc: "数组类型也能通过",
+		},
+
+		{
+			name: "QSCount",
+			data: `100`,
+			desc: "最简单的类型",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawState(test.name, []byte(test.data))
 		assert.Nil(t, err, test.desc)
 	}
 }
