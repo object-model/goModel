@@ -22,5 +22,7 @@ _testmain.go
 *.exe
 *.test
 
+*.out
+
 .idea
 logs
