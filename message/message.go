@@ -27,6 +27,9 @@ type Resp map[string]interface{}
 // 未解析的事件或者方法参数
 type RawArgs map[string]jsoniter.RawMessage
 
+// 未解析的调用返回值
+type RawResp map[string]jsoniter.RawMessage
+
 // 状态
 type State struct {
 	Name string      `json:"name"` // 状态全名: 模型名/状态名
@@ -69,13 +72,14 @@ type EventPayload struct {
 type CallPayload struct {
 	Name string  `json:"name"` // 调用的全方法名: 模型名/方法名
 	UUID string  `json:"uuid"` // 调用的UUID
-	Args RawArgs `json:"args"` // 调用的参数
+	Args RawArgs `json:"args"` // 未解析的调用的参数
 }
 
+// 调用响应报文 报文内容定义
 type ResponsePayload struct {
-	UUID     string `json:"uuid"`     // 响应的UUID
-	Error    string `json:"error"`    // 错误字符串
-	Response Resp   `json:"response"` // 响应结果
+	UUID     string  `json:"uuid"`     // 响应的UUID
+	Error    string  `json:"error"`    // 错误字符串
+	Response RawResp `json:"response"` // 未解析的响应结果
 }
 
 // Must 保证编码必须无错误返回，否则会panic
