@@ -415,6 +415,21 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 1. 完成根据元信息校验原始状态报文的功能
 
+2. 完成根据元信息校验原始状态数据的测试用例
+
+3. 在校验原始数据的第一步解析JSON串时，排除返回`io.EOF`的情况：
+
+   ```go
+   	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+   	if (it.Error != nil && it.Error != io.EOF) || it.WhatIsNext() != jsoniter.InvalidValue {
+   		return fmt.Errorf("invalid JSON data")
+   	}
+   ```
+
+   原因是数值类型的JSON数据例如`123`，解析后返回的是`io.EOF`。
+
+4. 使用和标准库完全兼容的解码方式
+
 ## 20231205
 
 1. 优化程序模块划分，将所有物模型报文的编码都整合到message中，将不属于message的部分移动到别处
