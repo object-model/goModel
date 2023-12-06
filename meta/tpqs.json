@@ -107,6 +107,35 @@
         ]
       },
       "length": 8
+    },
+
+    {
+      "name": "gear",
+      "description": "车辆档位状态",
+      "type": "uint",
+      "range": {
+        "option": [
+          {
+            "value": 0,
+            "description": "驻车"
+          },
+
+          {
+            "value": 1,
+            "description": "行驶"
+          },
+
+          {
+            "value": 2,
+            "description": "空档"
+          },
+
+          {
+            "value": 3,
+            "description": "倒档"
+          }
+        ]
+      }
     }
   ],
   "event": [
@@ -146,6 +175,10 @@
                 "name": "temp",
                 "description": "电机温度",
                 "type": "int",
+                "range": {
+                  "max": 200,
+                  "min": -30
+                },
                 "unit": "℃"
               }
             ]

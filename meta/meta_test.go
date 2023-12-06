@@ -1124,6 +1124,35 @@ func TestParseOk(t *testing.T) {
 				},
 				Length: newUint(8),
 			},
+
+			{
+				Name:        newString("gear"),
+				Description: newString("车辆档位状态"),
+				Type:        "uint",
+				Range: &RangeInfo{
+					Option: []OptionInfo{
+						{
+							Value:       uint(0),
+							Description: "驻车",
+						},
+
+						{
+							Value:       uint(1),
+							Description: "行驶",
+						},
+
+						{
+							Value:       uint(2),
+							Description: "空档",
+						},
+
+						{
+							Value:       uint(3),
+							Description: "倒档",
+						},
+					},
+				},
+			},
 		},
 		Event: []EventMeta{
 			{
@@ -1162,6 +1191,10 @@ func TestParseOk(t *testing.T) {
 									Description: newString("电机温度"),
 									Type:        "int",
 									Unit:        newString("℃"),
+									Range: &RangeInfo{
+										Max: 200,
+										Min: -30,
+									},
 								},
 							},
 						},
@@ -1295,6 +1328,7 @@ func TestParseOk(t *testing.T) {
 		stateIndex: map[string]int{
 			"tpqsInfo":  0,
 			"powerInfo": 1,
+			"gear":      2,
 		},
 
 		eventIndex: map[string]int{
@@ -1318,6 +1352,7 @@ func TestParseOk(t *testing.T) {
 	assert.EqualValues(t, []string{
 		"A/car/#1/tpqs/tpqsInfo",
 		"A/car/#1/tpqs/powerInfo",
+		"A/car/#1/tpqs/gear",
 	}, m.AllStates())
 
 	assert.EqualValues(t, []string{
@@ -1581,6 +1616,20 @@ func TestMeta_VerifyStateError(t *testing.T) {
 			errStr: "element[1]: field \"outCur\": greater than max",
 			desc:   "数组中某一项的某个字段超限",
 		},
+
+		{
+			name:   "gear",
+			data:   uint(4),
+			errStr: "4 NOT in option",
+			desc:   "uint类型的值不在可选项中",
+		},
+
+		{
+			name:   "gear",
+			data:   nil,
+			errStr: "nil",
+			desc:   "空值",
+		},
 	}
 
 	for _, test := range testCases {
@@ -1787,6 +1836,12 @@ func TestMeta_VerifyStateOK(t *testing.T) {
 			},
 			Desc: "正常状态3",
 		},
+
+		{
+			Name: "gear",
+			Data: uint8(0),
+			Desc: "正常状态4",
+		},
 	}
 
 	for _, test := range testCases {
@@ -1916,6 +1971,56 @@ func TestMeta_VerifyEventError(t *testing.T) {
 			},
 			errStr: "arg \"motors\": element: field \"temp\": type unmatched",
 			desc:   "事件参数的子字段类型不匹配-temp为float32",
+		},
+
+		{
+			name: "qsAction",
+			args: message.Args{
+				"motors": [4]struct {
+					Rov  int16 `json:"rov"`
+					Cur  int16 `json:"cur"`
+					Temp int   `json:"temp"`
+				}{
+					{
+						Rov:  2000,
+						Cur:  8999,
+						Temp: 200,
+					},
+
+					{
+						Rov:  2000,
+						Cur:  8999,
+						Temp: 201,
+					},
+				},
+			},
+			errStr: "arg \"motors\": element[1]: field \"temp\": greater than max",
+			desc:   "事件参数的子字段超限--temp大于最大值",
+		},
+
+		{
+			name: "qsAction",
+			args: message.Args{
+				"motors": [4]struct {
+					Rov  int16 `json:"rov"`
+					Cur  int16 `json:"cur"`
+					Temp int   `json:"temp"`
+				}{
+					{
+						Rov:  2000,
+						Cur:  8999,
+						Temp: 200,
+					},
+
+					{
+						Rov:  2000,
+						Cur:  8999,
+						Temp: -31,
+					},
+				},
+			},
+			errStr: "arg \"motors\": element[1]: field \"temp\": less than min",
+			desc:   "事件参数的子字段超限--temp大于最大值",
 		},
 	}
 
