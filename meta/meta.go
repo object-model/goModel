@@ -281,33 +281,8 @@ func verifyIntData(meta ParamMeta, data interface{}, checkRange bool) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if checkRange && meta.Range != nil {
-		// 如果有option, 则以option为准，否则以最大最小值为准
-		if meta.Range.Option != nil {
-			seen := false
-			for _, option := range meta.Range.Option {
-				if option.Value.(int) == value {
-					seen = true
-					break
-				}
-			}
-			if !seen {
-				return fmt.Errorf("%d NOT in option", value)
-			}
-		} else {
-			if meta.Range.Min != nil {
-				min := meta.Range.Min.(int)
-				if value < min {
-					return fmt.Errorf("less than min")
-				}
-			}
-			if meta.Range.Max != nil {
-				max := meta.Range.Max.(int)
-				if value > max {
-					return fmt.Errorf("greater than max")
-				}
-			}
-		}
+	if checkRange {
+		return verifyRangeForInt(meta.Range, value)
 	}
 
 	return nil
@@ -332,33 +307,8 @@ func verifyUintData(meta ParamMeta, data interface{}, checkRange bool) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if checkRange && meta.Range != nil {
-		// 如果有option, 则以option为准，否则以最大最小值为准
-		if meta.Range.Option != nil {
-			seen := false
-			for _, option := range meta.Range.Option {
-				if option.Value.(uint) == value {
-					seen = true
-					break
-				}
-			}
-			if !seen {
-				return fmt.Errorf("%d NOT in option", value)
-			}
-		} else {
-			if meta.Range.Min != nil {
-				min := meta.Range.Min.(uint)
-				if value < min {
-					return fmt.Errorf("less than min")
-				}
-			}
-			if meta.Range.Max != nil {
-				max := meta.Range.Max.(uint)
-				if value > max {
-					return fmt.Errorf("greater than max")
-				}
-			}
-		}
+	if checkRange {
+		return verifyRangeForUint(meta.Range, value)
 	}
 
 	return nil
@@ -397,20 +347,10 @@ func verifyFloatData(meta ParamMeta, data interface{}, checkRange bool) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if checkRange && meta.Range != nil {
-		if meta.Range.Min != nil {
-			min := meta.Range.Min.(float64)
-			if value < min {
-				return fmt.Errorf("less than min")
-			}
-		}
-		if meta.Range.Max != nil {
-			max := meta.Range.Max.(float64)
-			if value > max {
-				return fmt.Errorf("greater than max")
-			}
-		}
+	if checkRange {
+		return verifyRangeForFloat(meta.Range, value)
 	}
+
 	return nil
 }
 
@@ -422,17 +362,8 @@ func verifyStringData(meta ParamMeta, data interface{}, checkRange bool) error {
 	}
 
 	// 2.如果有范围约束，检查是否在范围内
-	if checkRange && meta.Range != nil {
-		seen := false
-		for _, option := range meta.Range.Option {
-			if option.Value.(string) == value {
-				seen = true
-				break
-			}
-		}
-		if !seen {
-			return fmt.Errorf("%q NOT in option", value)
-		}
+	if checkRange {
+		return verifyRangeForString(meta.Range, value)
 	}
 	return nil
 }
@@ -551,6 +482,290 @@ func verifyMetaData(data interface{}) error {
 
 	_, err := Parse(meta.ToJSON(), nil)
 	return err
+}
+
+// VerifyRawState 校验名为name状态原始数据为data的状态是否符合元信息m, 如果不符合返回错误原因.
+// VerifyRawState 与 VerifyState 的区别是:
+// VerifyRawState 中的data为尚未解析的JSON原始数据, 而 VerifyState 中的data为真实数据，后续需要序列化.
+// VerifyRawState 一般用于校验从网络上接收的状态报文是否符合元信息,
+// VerifyState 一般用于推送状态前校验待推送的状态是否符合元信息.
+func (m *Meta) VerifyRawState(name string, data []byte) error {
+	if index, seen := m.stateIndex[name]; !seen {
+		return fmt.Errorf("NO state %q", name)
+	} else {
+		return verifyRawData(m.State[index], data)
+	}
+}
+
+func verifyRawData(meta ParamMeta, data []byte) error {
+	// data必须是有效的JSON数据
+	it := jsoniter.ParseBytes(jsoniter.ConfigDefault, data)
+	root := it.ReadAny()
+	if it.Error != nil || it.WhatIsNext() != jsoniter.InvalidValue {
+		return fmt.Errorf("invalid JSON data")
+	}
+
+	return _verifyRawData_(meta, root)
+}
+
+func _verifyRawData_(meta ParamMeta, root jsoniter.Any) error {
+	switch meta.Type {
+	case "int":
+		return verifyRawIntData(meta, root)
+	case "uint":
+		return verifyRawUintData(meta, root)
+	case "float":
+		return verifyRawFloatData(meta, root)
+	case "bool":
+		return verifyRawBoolData(root)
+	case "string":
+		return verifyRawStringData(meta, root)
+	case "array":
+		return verifyRawArrayData(meta, root)
+	case "slice":
+		return verifyRawSliceData(meta, root)
+	case "struct":
+		return verifyRawStructData(meta, root)
+	case "meta":
+		return verifyRawMetaData(root)
+	}
+	return nil
+}
+
+func verifyRawIntData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是数值类型
+	if root.ValueType() != jsoniter.NumberValue {
+		return fmt.Errorf("NOT number")
+	}
+
+	// 2.必须能转换成int类型
+	value := root.ToInt()
+	if root.LastError() != nil {
+		return fmt.Errorf("NOT int")
+	}
+
+	// 3.检查范围约束
+	return verifyRangeForInt(meta.Range, value)
+}
+
+func verifyRawUintData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是数值类型
+	if root.ValueType() != jsoniter.NumberValue {
+		return fmt.Errorf("NOT number")
+	}
+
+	// 2.必须能转换成uint类型
+	value := root.ToUint()
+	if root.LastError() != nil {
+		return fmt.Errorf("NOT uint")
+	}
+
+	// 3.则检查范围
+	return verifyRangeForUint(meta.Range, value)
+}
+
+func verifyRawFloatData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是数值类型
+	if root.ValueType() != jsoniter.NumberValue {
+		return fmt.Errorf("NOT number")
+	}
+
+	// 2.必须能转换成float64类型
+	value := root.ToFloat64()
+	if root.LastError() != nil {
+		return fmt.Errorf("NOT float")
+	}
+
+	// 3.检查范围
+	return verifyRangeForFloat(meta.Range, value)
+}
+
+func verifyRawBoolData(root jsoniter.Any) error {
+	// 1.必须是bool类型
+	if root.ValueType() != jsoniter.BoolValue {
+		return fmt.Errorf("NOT bool")
+	}
+
+	return nil
+}
+
+func verifyRawStringData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是string类型
+	if root.ValueType() != jsoniter.StringValue {
+		return fmt.Errorf("NOT string")
+	}
+
+	// 2.检查范围
+	return verifyRangeForString(meta.Range, root.ToString())
+}
+
+func verifyRawArrayData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是array类型
+	if root.ValueType() != jsoniter.ArrayValue {
+		return fmt.Errorf("NOT array")
+	}
+
+	// 2.长度必须匹配
+	length := *meta.Length
+	if uint(root.Size()) != length {
+		return fmt.Errorf("length NOT equal to %d", length)
+	}
+
+	// 3.逐个比较每个数值元素
+	for i := 0; i < root.Size(); i++ {
+		if err := _verifyRawData_(*meta.Element, root.Get(i)); err != nil {
+			return fmt.Errorf("element[%d]: %s", i, err)
+		}
+	}
+
+	return nil
+}
+
+func verifyRawSliceData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是array类型
+	if root.ValueType() != jsoniter.ArrayValue {
+		return fmt.Errorf("NOT slice")
+	}
+
+	// 2.逐个比较每个数值元素
+	for i := 0; i < root.Size(); i++ {
+		if err := _verifyRawData_(*meta.Element, root.Get(i)); err != nil {
+			return fmt.Errorf("element[%d]: %s", i, err)
+		}
+	}
+
+	return nil
+}
+
+func verifyRawStructData(meta ParamMeta, root jsoniter.Any) error {
+	// 1.必须是object类型
+	if root.ValueType() != jsoniter.ObjectValue {
+		return fmt.Errorf("NOT struct")
+	}
+
+	// 2.每个成员是否匹配
+	// NOTE: 元信息中每个字段一定要在数据中存在，且字段值能匹配
+	// NOTE: 数据中多余的字段不判断，保持一定的兼容性
+	for _, fieldMeta := range meta.Fields {
+		// a.元信息中的字段一定要在数据中存在
+		filedName := *fieldMeta.Name
+
+		field := root.Get(filedName)
+		if field.LastError() != nil {
+			return fmt.Errorf("field %q: missging", filedName)
+		}
+
+		// b.字段值也要匹配
+		if err := _verifyRawData_(fieldMeta, field); err != nil {
+			return fmt.Errorf("field %q: %s", filedName, err)
+		}
+	}
+
+	return nil
+}
+
+func verifyRawMetaData(root jsoniter.Any) error {
+	return check(root)
+}
+
+func verifyRangeForInt(rangeInfo *RangeInfo, value int) error {
+	// 没有范围约束，无错误
+	if rangeInfo == nil {
+		return nil
+	}
+
+	// 如果有option, 则以option为准，否则以最大最小值为准
+	if rangeInfo.Option != nil {
+		for _, option := range rangeInfo.Option {
+			if option.Value.(int) == value {
+				return nil
+			}
+		}
+		return fmt.Errorf("%d NOT in option", value)
+	} else {
+		if rangeInfo.Min != nil {
+			min := rangeInfo.Min.(int)
+			if value < min {
+				return fmt.Errorf("less than min")
+			}
+		}
+		if rangeInfo.Max != nil {
+			max := rangeInfo.Max.(int)
+			if value > max {
+				return fmt.Errorf("greater than max")
+			}
+		}
+	}
+	return nil
+}
+
+func verifyRangeForUint(rangeInfo *RangeInfo, value uint) error {
+	// 没有范围约束，无错误
+	if rangeInfo == nil {
+		return nil
+	}
+
+	// 如果有option, 则以option为准，否则以最大最小值为准
+	if rangeInfo.Option != nil {
+		for _, option := range rangeInfo.Option {
+			if option.Value.(uint) == value {
+				return nil
+			}
+		}
+		return fmt.Errorf("%d NOT in option", value)
+	} else {
+		if rangeInfo.Min != nil {
+			min := rangeInfo.Min.(uint)
+			if value < min {
+				return fmt.Errorf("less than min")
+			}
+		}
+		if rangeInfo.Max != nil {
+			max := rangeInfo.Max.(uint)
+			if value > max {
+				return fmt.Errorf("greater than max")
+			}
+		}
+	}
+
+	return nil
+}
+
+func verifyRangeForFloat(rangeInfo *RangeInfo, value float64) error {
+	// 没有范围约束，无错误
+	if rangeInfo == nil {
+		return nil
+	}
+
+	if rangeInfo.Min != nil {
+		min := rangeInfo.Min.(float64)
+		if value < min {
+			return fmt.Errorf("less than min")
+		}
+	}
+	if rangeInfo.Max != nil {
+		max := rangeInfo.Max.(float64)
+		if value > max {
+			return fmt.Errorf("greater than max")
+		}
+	}
+
+	return nil
+}
+
+func verifyRangeForString(rangeInfo *RangeInfo, value string) error {
+	// 没有范围约束，无错误
+	if rangeInfo == nil {
+		return nil
+	}
+
+	for _, option := range rangeInfo.Option {
+		if option.Value.(string) == value {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%q NOT in option", value)
 }
 
 func (m *Meta) parseTemplate(name string) {
