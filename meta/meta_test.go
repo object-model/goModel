@@ -1497,6 +1497,22 @@ func TestMeta_VerifyStateError(t *testing.T) {
 				QSState  string  `json:"qsState"`
 				HPSwitch bool    `json:"hpSwitch"`
 				QSAngle  float64 `json:"qsAngle"`
+				Errors   string  `json:"errors"`
+			}{
+				QSState:  "erecting",
+				HPSwitch: false,
+				QSAngle:  45.0,
+			},
+			errStr: "field \"errors\": type unmatched",
+			desc:   "切片元素的类型不匹配",
+		},
+
+		{
+			name: "tpqsInfo",
+			data: struct {
+				QSState  string  `json:"qsState"`
+				HPSwitch bool    `json:"hpSwitch"`
+				QSAngle  float64 `json:"qsAngle"`
 				Errors   []struct {
 					Code uint   `json:"code"`
 					Msg  string `json:"msg"`
