@@ -559,7 +559,7 @@ func (m *Meta) parseTemplate(name string) {
 
 	// 2.去除每个token前后的空格
 	for i, token := range tokens {
-		tokens[i] = strings.Trim(token, " \t\n\r\f\v")
+		tokens[i] = strings.TrimSpace(token)
 	}
 
 	// 3.过滤空的token
@@ -1549,7 +1549,7 @@ func checkModelName(name string) error {
 
 	// 2.去除每个token前后空格
 	for i, token := range tokens {
-		tokens[i] = strings.Trim(token, " \t\n\r\f\v")
+		tokens[i] = strings.TrimSpace(token)
 	}
 
 	// 3.过滤空的token
@@ -1581,7 +1581,7 @@ func checkModelName(name string) error {
 		// {...} 形式的模板
 		if strings.HasPrefix(token, "{") && strings.HasSuffix(token, "}") {
 			// 去除{和 } 并 去除空格后的 模板名称
-			templateName := strings.Trim(token[1:len(token)-1], " \t\n\r\f\v")
+			templateName := strings.TrimSpace(token[1 : len(token)-1])
 
 			// 模板名称不允许为空
 			if templateName == "" {
