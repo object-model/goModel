@@ -2616,6 +2616,68 @@ func TestMeta_VerifyRawStateError(t *testing.T) {
 	}
 }
 
+func TestMeta_VerifyRawStateMeta(t *testing.T) {
+	m, err := Parse([]byte(metaJson), nil)
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name   string
+		data   string
+		errStr string
+		desc   string
+	}
+
+	testCases := []TestCase{
+		{
+			name:   "metaInfo",
+			data:   `{`,
+			errStr: "invalid JSON data",
+			desc:   "无效JSON数据",
+		},
+
+		{
+			name:   "metaInfo",
+			data:   `{}`,
+			errStr: "root: name NOT exist",
+			desc:   "元信息缺失name字段",
+		},
+
+		{
+			name:   "metaInfo",
+			data:   `123`,
+			errStr: "root: NOT an object",
+			desc:   "元信息不是对象",
+		},
+
+		{
+			name:   "metaInfo",
+			data:   `{"name": "test"}`,
+			errStr: "root: description NOT exist",
+			desc:   "元信息缺失description字段",
+		},
+
+		{
+			name:   "metaInfo",
+			data:   `{"name": "test", "description": "测试元信息"}`,
+			errStr: "root: state NOT exist",
+			desc:   "元信息缺失state字段",
+		},
+
+		{
+			name:   "metaInfo",
+			data:   `{"name": "test", "description": "测试元信息", "state": {}}`,
+			errStr: "root: state is NOT array",
+			desc:   "元信息的state不是数组",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawState(test.name, []byte(test.data))
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+}
+
 func TestMeta_VerifyRawStateOk(t *testing.T) {
 	json, _ := ioutil.ReadFile("./tpqs.json")
 	m, err := Parse(json, TemplateParam{
