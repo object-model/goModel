@@ -60,6 +60,12 @@ func TestParseError(t *testing.T) {
 		},
 
 		{
+			`{}abc`,
+			"parse JSON failed",
+			"解析JSON串错误4",
+		},
+
+		{
 			`[]`,
 			"root: NOT an object",
 			"根节点不是对象",
@@ -1669,12 +1675,18 @@ func TestMeta_VerifyStateMetaError(t *testing.T) {
 	assert.Nil(t, err)
 
 	type TestCase struct {
-		MetaData Meta
+		MetaData interface{}
 		ErrStr   string
 		Desc     string
 	}
 
 	testCases := []TestCase{
+		{
+			MetaData: 123,
+			ErrStr:   "type unmatched",
+			Desc:     "类型不匹配",
+		},
+
 		{
 			MetaData: Meta{},
 			ErrStr:   "root: name is empty",
@@ -2608,6 +2620,13 @@ func TestMeta_VerifyRawStateError(t *testing.T) {
 			errStr: "element[0]: field \"outCur\": NOT number",
 			desc:   "要求是float类型，收到的却是数组类型",
 		},
+
+		{
+			name:   "QSCount",
+			data:   `100true`,
+			errStr: "invalid JSON data",
+			desc:   "简单类型的状态，收到的却是无效的JSON数据",
+		},
 	}
 
 	for _, test := range testCases {
@@ -2878,6 +2897,24 @@ func TestMeta_VerifyRawMethodArgs(t *testing.T) {
 		{
 			name: "QS",
 			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`90.0{}`),
+			},
+			err:  errors.New("arg \"angle\": invalid JSON data"),
+			desc: "参数中某一字段为无效的JSON数据1",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`45abc`),
+			},
+			err:  errors.New("arg \"angle\": invalid JSON data"),
+			desc: "参数中某一字段为无效的JSON数据2",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
 				"angle": jsoniter.RawMessage(`-0.1`),
 			},
 			err:  errors.New("arg \"angle\": less than min"),
@@ -2926,6 +2963,112 @@ func TestMeta_VerifyRawMethodArgs(t *testing.T) {
 
 	for _, test := range testCases {
 		err = m.VerifyRawMethodArgs(test.name, test.args)
+		assert.EqualValues(t, test.err, err, test.desc)
+	}
+}
+
+func TestMeta_VerifyMethodResp(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		resp message.RawResp
+		err  error
+		desc string
+	}
+
+	testCases := []TestCase{
+		{
+			name: "unknown",
+			resp: message.RawResp{},
+			err:  errors.New("NO method \"unknown\""),
+			desc: "方法不存在",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{},
+			err:  errors.New("response \"res\": missing"),
+			desc: "方法返回值缺失",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res": jsoniter.RawMessage(`true`),
+				"msg": jsoniter.RawMessage(`执行成功`),
+			},
+			err:  errors.New("response \"msg\": invalid JSON data"),
+			desc: "字符串类型返回值不是有效的JSON数据",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res":  jsoniter.RawMessage(`true`),
+				"msg":  jsoniter.RawMessage(`"执行成功"`),
+				"time": jsoniter.RawMessage(`89_64`),
+			},
+			err:  errors.New("response \"time\": invalid JSON data"),
+			desc: "uint类型返回值不是有效的JSON数据",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res":  jsoniter.RawMessage(`true`),
+				"msg":  jsoniter.RawMessage(`"执行成功"`),
+				"time": jsoniter.RawMessage(`89`),
+				"code": jsoniter.RawMessage(`123haha`),
+			},
+			err:  errors.New("response \"code\": invalid JSON data"),
+			desc: "int类型返回值不是有效的JSON数据",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res":  jsoniter.RawMessage(`true`),
+				"msg":  jsoniter.RawMessage(`"执行成功"`),
+				"time": jsoniter.RawMessage(`89`),
+				"code": jsoniter.RawMessage(`1.0`),
+			},
+			err:  errors.New("response \"code\": NOT int"),
+			desc: "要求的int类型数据，收到的却是浮点型",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res":  jsoniter.RawMessage(`true`),
+				"msg":  jsoniter.RawMessage(`"执行成功"`),
+				"time": jsoniter.RawMessage(`89`),
+				"code": jsoniter.RawMessage(`4`),
+			},
+			err:  errors.New("response \"code\": 4 NOT in option"),
+			desc: "int类型的数据不在可选项中",
+		},
+
+		{
+			name: "QS",
+			resp: message.RawResp{
+				"res":  jsoniter.RawMessage(`true`),
+				"msg":  jsoniter.RawMessage(`"执行成功"`),
+				"time": jsoniter.RawMessage(`89`),
+				"code": jsoniter.RawMessage(`1`),
+			},
+			err:  nil,
+			desc: "正确的调用响应",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawMethodResp(test.name, test.resp)
 		assert.EqualValues(t, test.err, err, test.desc)
 	}
 }

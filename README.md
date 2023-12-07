@@ -414,7 +414,33 @@ Proxy is object model proxy server which can transmit model message and also pro
 ## 20231207
 
 1. 完成根据元信息校验原始事件参数的测试用例
+
 2. 完成根据元信息校验原始调用请求参数的测试用例
+
+3. 完成根据元信息校验原始调用响应返回值的测试用例
+
+4. 判断原始数据是否为有效的JSON数据的方法改成直接调用`Unmarshal`：
+
+   ```go
+   	var value interface{}
+   	if err := jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, &value); err != nil {
+   		return fmt.Errorf("invalid JSON data")
+   	}
+   ```
+
+   之前的方法为：
+
+   ```go
+   	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+   	root := it.ReadAny()
+   	if (it.Error != nil && it.Error != io.EOF) || it.WhatIsNext() != jsoniter.InvalidValue {
+   		return fmt.Errorf("invalid JSON data")
+   	}
+   ```
+
+   之前的方法在输入数据为某些极端数据时不会返回错误，例如`123_45`、`{}123`、`123true"name"`，改进后的做法能杜绝这种情况的发生
+
+5. 添加新的测试用例，充分验证无效JSON数据的情况
 
 ## 20231206
 
