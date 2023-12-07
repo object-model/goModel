@@ -442,6 +442,8 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 5. 添加新的测试用例，充分验证无效JSON数据的情况
 
+6. 将所有的JSON序列化与反序列化都改成与标准库兼容的方式
+
 ## 20231206
 
 1. 完成根据元信息校验原始状态报文的功能

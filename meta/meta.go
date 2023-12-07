@@ -588,10 +588,11 @@ func (m *Meta) VerifyRawMethodResp(name string, response message.RawResp) error 
 func verifyRawData(meta ParamMeta, data []byte) error {
 	// data必须是有效的JSON数据
 	var value interface{}
-	if err := jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(data, &value); err != nil {
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf("invalid JSON data")
 	}
-	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, data)
+	it := jsoniter.ParseBytes(json, data)
 	root := it.ReadAny()
 
 	return _verifyRawData_(meta, root)
@@ -916,10 +917,11 @@ func (m *Meta) setTemplate(param TemplateParam) (err error) {
 func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 	// 1. 解析JSON数据
 	var value interface{}
-	if err := jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(rawData, &value); err != nil {
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	if err := json.Unmarshal(rawData, &value); err != nil {
 		return NewEmptyMeta(), fmt.Errorf("parse JSON failed")
 	}
-	it := jsoniter.ParseBytes(jsoniter.ConfigCompatibleWithStandardLibrary, rawData)
+	it := jsoniter.ParseBytes(json, rawData)
 	root := it.ReadAny()
 
 	// 2. 检查元信息是否正确

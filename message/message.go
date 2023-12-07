@@ -110,7 +110,8 @@ func EncodeSubStateMsg(Type int, items []string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid Type")
 	}
 
-	payload, err := jsoniter.Marshal(items)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(items)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +139,8 @@ func EncodeSubEventMsg(Type int, items []string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid Type")
 	}
 
-	payload, err := jsoniter.Marshal(items)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(items)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +160,8 @@ func EncodeStateMsg(stateName string, data interface{}) ([]byte, error) {
 		Data: data,
 	}
 
-	payload, err := jsoniter.Marshal(state)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(state)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +181,8 @@ func EncodeEventMsg(eventName string, args Args) ([]byte, error) {
 		Args: args,
 	}
 
-	payload, err := jsoniter.Marshal(event)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(event)
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +203,8 @@ func EncodeCallMsg(methodName string, uuid string, args Args) ([]byte, error) {
 		Args: args,
 	}
 
-	payload, err := jsoniter.Marshal(call)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(call)
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +225,8 @@ func EncodeRespMsg(uuid string, errStr string, resp Resp) ([]byte, error) {
 		Response: resp,
 	}
 
-	payload, err := jsoniter.Marshal(response)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	payload, err := json.Marshal(response)
 	if err != nil {
 		return nil, err
 	}
@@ -241,5 +247,6 @@ func EncodeMsg(Type string, payload jsoniter.RawMessage) ([]byte, error) {
 		Payload: payload,
 	}
 
-	return jsoniter.Marshal(msg)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	return json.Marshal(msg)
 }
