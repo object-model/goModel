@@ -1,6 +1,7 @@
 package meta
 
 import (
+	"errors"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
@@ -2834,5 +2835,97 @@ func TestMeta_VerifyRawEventOK(t *testing.T) {
 	for _, test := range testCases {
 		err = m.VerifyRawEvent(test.name, test.args)
 		assert.Nil(t, err, test.desc)
+	}
+}
+
+func TestMeta_VerifyRawMethodArgs(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		args message.RawArgs
+		err  error
+		desc string
+	}
+
+	testCases := []TestCase{
+		{
+			name: "unknown",
+			args: message.RawArgs{},
+			err:  errors.New("NO method \"unknown\""),
+			desc: "方法不存在",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{},
+			err:  errors.New("arg \"angle\": missing"),
+			desc: "方法参数缺失",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{},
+			err:  errors.New("arg \"angle\": missing"),
+			desc: "方法参数缺失",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`-0.1`),
+			},
+			err:  errors.New("arg \"angle\": less than min"),
+			desc: "浮点型参数小于最小值",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`91.000001`),
+			},
+			err:  errors.New("arg \"angle\": greater than max"),
+			desc: "浮点型参数大于最大值",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`91.00000`),
+				"speed": jsoniter.RawMessage(`unknown`),
+			},
+			err:  errors.New("arg \"speed\": invalid JSON data"),
+			desc: "字符串类型参数的值不是有效的JSON数据",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`91.00000`),
+				"speed": jsoniter.RawMessage(`"unknown"`),
+			},
+			err:  errors.New("arg \"speed\": \"unknown\" NOT in option"),
+			desc: "字符串类型参数的值不在可选项中",
+		},
+
+		{
+			name: "QS",
+			args: message.RawArgs{
+				"angle": jsoniter.RawMessage(`91.00000`),
+				"speed": jsoniter.RawMessage(`"middle"`),
+			},
+			err:  nil,
+			desc: "正确的调用请求参数",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawMethodArgs(test.name, test.args)
+		assert.EqualValues(t, test.err, err, test.desc)
 	}
 }
