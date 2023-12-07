@@ -166,7 +166,7 @@ func (m *model) reader() {
 		m.log.Println("<--", m.RemoteAddr().String(), string(data))
 
 		// 解析JSON报文
-		msg := message.Message{}
+		msg := message.RawMessage{}
 		if err = jsoniter.Unmarshal(data, &msg); err != nil {
 			break
 		}

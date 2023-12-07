@@ -444,6 +444,20 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 6. 将所有的JSON序列化与反序列化都改成与标准库兼容的方式
 
+7. 将message中编码物模型报文的方式改成一次编码
+
+   ```go
+   	msg := Message{
+   		Type:    typeStr,
+   		Payload: items,
+   	}
+   
+   	json := jsoniter.ConfigCompatibleWithStandardLibrary
+   	ans, _ := json.Marshal(msg)
+   ```
+
+8. 完成包message的单元测试
+
 ## 20231206
 
 1. 完成根据元信息校验原始状态报文的功能

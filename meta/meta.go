@@ -430,6 +430,7 @@ func verifySliceData(meta ParamMeta, data interface{}, checkRange bool) error {
 	return nil
 }
 
+// TODO: 后续是否可以支持map[string]类型
 func verifyStructData(meta ParamMeta, data interface{}, checkRange bool) error {
 	// 1.类型是否匹配
 	Type := reflect.TypeOf(data)

@@ -13,9 +13,15 @@ const (
 )
 
 // 物模型报文定义
-type Message struct {
+type RawMessage struct {
 	Type    string              `json:"type"`    // 报文类型
-	Payload jsoniter.RawMessage `json:"payload"` // 报文内容
+	Payload jsoniter.RawMessage `json:"payload"` // 未解码的报文内容
+}
+
+// 物模型报文定义
+type Message struct {
+	Type    string      `json:"type"`    // 报文类型
+	Payload interface{} `json:"payload"` // 报文内容
 }
 
 // 事件或者方法的参数
@@ -110,13 +116,15 @@ func EncodeSubStateMsg(Type int, items []string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid Type")
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(items)
-	if err != nil {
-		return nil, err
+	msg := Message{
+		Type:    typeStr,
+		Payload: items,
 	}
 
-	return EncodeMsg(typeStr, payload)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	ans, _ := json.Marshal(msg)
+
+	return ans, nil
 }
 
 // EncodeSubStateMsg 编码一个订阅类型为Type,订阅列表为items的事件订阅报文,
@@ -139,13 +147,15 @@ func EncodeSubEventMsg(Type int, items []string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid Type")
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(items)
-	if err != nil {
-		return nil, err
+	msg := Message{
+		Type:    typeStr,
+		Payload: items,
 	}
 
-	return EncodeMsg(typeStr, payload)
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	ans, _ := json.Marshal(msg)
+
+	return ans, nil
 }
 
 // EncodeStateMsg 编码一个状态全名为stateName数据为data的状态报文,
@@ -155,18 +165,21 @@ func EncodeStateMsg(stateName string, data interface{}) ([]byte, error) {
 		return nil, fmt.Errorf("nil data")
 	}
 
-	state := State{
-		Name: stateName,
-		Data: data,
+	msg := Message{
+		Type: "state",
+		Payload: State{
+			Name: stateName,
+			Data: data,
+		},
 	}
 
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(state)
+	ans, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode data failed")
 	}
 
-	return EncodeMsg("state", payload)
+	return ans, nil
 }
 
 // EncodeEventMsg 编码一个事件全名为eventName参数为args的事件报文,
@@ -176,18 +189,21 @@ func EncodeEventMsg(eventName string, args Args) ([]byte, error) {
 		args = Args{}
 	}
 
-	event := Event{
-		Name: eventName,
-		Args: args,
+	msg := Message{
+		Type: "event",
+		Payload: Event{
+			Name: eventName,
+			Args: args,
+		},
 	}
 
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(event)
+	ans, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode event args failed")
 	}
 
-	return EncodeMsg("event", payload)
+	return ans, nil
 }
 
 // EncodeCallMsg 编码一个方法全名为methodName,调用唯一标识为uuid,调用参数为args的调用请求报文,
@@ -197,19 +213,22 @@ func EncodeCallMsg(methodName string, uuid string, args Args) ([]byte, error) {
 		args = Args{}
 	}
 
-	call := Call{
-		Name: methodName,
-		UUID: uuid,
-		Args: args,
+	msg := Message{
+		Type: "call",
+		Payload: Call{
+			Name: methodName,
+			UUID: uuid,
+			Args: args,
+		},
 	}
 
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(call)
+	ans, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode call args failed")
 	}
 
-	return EncodeMsg("call", payload)
+	return ans, nil
 }
 
 // EncodeRespMsg 编码一个调用标识为uuid,错误提示信息为errStr,响应结果为resp的调用结果报文,
@@ -219,34 +238,43 @@ func EncodeRespMsg(uuid string, errStr string, resp Resp) ([]byte, error) {
 		resp = Resp{}
 	}
 
-	response := Response{
-		UUID:     uuid,
-		Error:    errStr,
-		Response: resp,
+	msg := Message{
+		Type: "response",
+		Payload: Response{
+			UUID:     uuid,
+			Error:    errStr,
+			Response: resp,
+		},
 	}
 
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	payload, err := json.Marshal(response)
+	ans, err := json.Marshal(msg)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("encode call response failed")
 	}
 
-	return EncodeMsg("response", payload)
+	return ans, nil
 }
 
 // EncodeQueryMetaMsg 编码一个查询物模型元信息JSON报文, 返回JSON编码后的全报文数据
 func EncodeQueryMetaMsg() []byte {
-	return []byte(`{ "type": "query-meta", "payload": null}`)
+	return []byte(`{"type":"query-meta","payload":null}`)
 }
 
-// EncodeMsg 编码一个报文类型为Type,报文数据域为payload的JSON报文,
+// EncodeRawMsg 编码一个报文类型为Type,报文数据域为payload的JSON报文,
 // 返回JSON编码后的全报文数据和错误信息
-func EncodeMsg(Type string, payload jsoniter.RawMessage) ([]byte, error) {
-	msg := Message{
+func EncodeRawMsg(Type string, payload jsoniter.RawMessage) ([]byte, error) {
+	json := jsoniter.ConfigCompatibleWithStandardLibrary
+	var value interface{}
+	if err := json.Unmarshal(payload, &value); err != nil {
+		return nil, fmt.Errorf("invalid payload")
+	}
+
+	msg := RawMessage{
 		Type:    Type,
 		Payload: payload,
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
-	return json.Marshal(msg)
+	ans, _ := json.Marshal(msg)
+	return ans, nil
 }

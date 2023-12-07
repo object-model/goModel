@@ -292,7 +292,7 @@ var proxyMetaMessage []byte
 var noneMetaMessage []byte
 
 func init() {
-	metaSendData := message.Must(message.EncodeMsg("meta-info",
+	metaSendData := message.Must(message.EncodeRawMsg("meta-info",
 		jsoniter.RawMessage(strings.Join(strings.Fields(ProxyMetaString), ""))))
 	proxyMetaMessage = metaSendData
 	noneMetaMessage = []byte(strings.Join(strings.Fields(NoneMetaString), ""))
