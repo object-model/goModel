@@ -411,6 +411,10 @@ Proxy is object model proxy server which can transmit model message and also pro
 
 # 更新日志
 
+## 20231207
+
+1. 完成根据元信息校验原始事件参数的测试用例
+
 ## 20231206
 
 1. 完成根据元信息校验原始状态报文的功能

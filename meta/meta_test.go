@@ -2723,3 +2723,116 @@ func TestMeta_VerifyRawStateOk(t *testing.T) {
 		assert.Nil(t, err, test.desc)
 	}
 }
+
+func TestMeta_VerifyRawEventError(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name   string
+		args   message.RawArgs
+		errStr string
+		desc   string
+	}
+
+	testCases := []TestCase{
+		{
+			name:   "unknown",
+			args:   message.RawArgs{},
+			errStr: "NO event \"unknown\"",
+			desc:   "不存在的事件",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors": jsoniter.RawMessage(`[{}, {}]`),
+			},
+			errStr: "arg \"motors\": length NOT equal to 4",
+			desc:   "数组类型的数据长度不正确",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors": jsoniter.RawMessage(`[{"rov": 100, "cur": 21, "temp": 34}, {"rov": {}, "cur": 21, "temp": 34}, {}, {}]`),
+			},
+			errStr: "arg \"motors\": element[1]: field \"rov\": NOT number",
+			desc:   "要求是int类型，收到的却是对象类型",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors": jsoniter.RawMessage(`[{"rov": 100.2, "cur": 21, "temp": 34}, {}, {}, {}]`),
+			},
+			errStr: "arg \"motors\": element[0]: field \"rov\": NOT int",
+			desc:   "要求是int类型，收到的却是浮点数",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors": jsoniter.RawMessage(`[{"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": -34}]`),
+			},
+			errStr: "arg \"motors\": element[3]: field \"temp\": less than min",
+			desc:   "int类型的数据小于最小值",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors": jsoniter.RawMessage(`[{"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": -30}]`),
+			},
+			errStr: "arg \"qsAngle\": missing",
+			desc:   "参数缺失",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawEvent(test.name, test.args)
+		assert.NotNil(t, err, test.desc)
+		assert.EqualValues(t, test.errStr, err.Error(), test.desc)
+	}
+}
+
+func TestMeta_VerifyRawEventOK(t *testing.T) {
+	json, _ := ioutil.ReadFile("./tpqs.json")
+	m, err := Parse(json, TemplateParam{
+		" group": "  A  ",
+		" id  ":  " #1",
+	})
+	assert.Nil(t, err)
+
+	type TestCase struct {
+		name string
+		args message.RawArgs
+		desc string
+	}
+
+	testCases := []TestCase{
+		{
+			name: "qsMotorOverCur",
+			args: message.RawArgs{},
+			desc: "无事件参数的情况",
+		},
+
+		{
+			name: "qsAction",
+			args: message.RawArgs{
+				"motors":  jsoniter.RawMessage(`[{"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": 34}, {"rov": 100, "cur": 21, "temp": -30}]`),
+				"qsAngle": jsoniter.RawMessage(`45.678`),
+			},
+			desc: "复杂事件参数的情况",
+		},
+	}
+
+	for _, test := range testCases {
+		err = m.VerifyRawEvent(test.name, test.args)
+		assert.Nil(t, err, test.desc)
+	}
+}
