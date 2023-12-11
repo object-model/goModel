@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"sync"
 )
 
 var upgrader = websocket.Upgrader{
@@ -29,6 +30,8 @@ type CallRequestFunc func(name string, args message.RawArgs)
 type Model struct {
 	meta           *meta.Meta
 	callReqHandler CallRequestFunc
+	connLock       sync.RWMutex // 保护 allConn
+	allConn        map[*Connection]struct{}
 }
 
 func NewEmptyModel() *Model {
@@ -80,7 +83,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.handlerConn(rawConn.NewTcpConn(conn))
+		go m.dealConn(rawConn.NewTcpConn(conn))
 	}
 }
 
@@ -91,11 +94,37 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.handlerConn(rawConn.NewWebSocketConn(conn))
+		m.dealConn(rawConn.NewWebSocketConn(conn))
 	})
 	return http.ListenAndServe(addr, nil)
 }
 
-func (m *Model) handlerConn(conn rawConn.RawConn) {
+func (m *Model) dealConn(raw rawConn.RawConn) {
+	if raw == nil {
+		return
+	}
 
+	conn := &Connection{
+		raw: raw,
+		m:   m,
+	}
+
+	// 添加链接
+	m.addConn(conn)
+	// 处理接收
+	conn.dealReceive()
+	// 删除链接
+	m.removeConn(conn)
+}
+
+func (m *Model) addConn(conn *Connection) {
+	m.connLock.Lock()
+	defer m.connLock.Unlock()
+	m.allConn[conn] = struct{}{}
+}
+
+func (m *Model) removeConn(conn *Connection) {
+	m.connLock.Lock()
+	defer m.connLock.Unlock()
+	delete(m.allConn, conn)
 }
