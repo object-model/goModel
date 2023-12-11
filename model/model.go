@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -28,10 +29,10 @@ type ServiceTCPAddr struct {
 type CallRequestFunc func(name string, args message.RawArgs)
 
 type Model struct {
-	meta           *meta.Meta
-	callReqHandler CallRequestFunc
-	connLock       sync.RWMutex // 保护 allConn
-	allConn        map[*Connection]struct{}
+	meta           *meta.Meta               // 元信息
+	callReqHandler CallRequestFunc          // 调用请求处理函数
+	connLock       sync.RWMutex             // 保护 allConn
+	allConn        map[*Connection]struct{} // 所有连接
 }
 
 func NewEmptyModel() *Model {
@@ -83,7 +84,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.dealConn(rawConn.NewTcpConn(conn))
+		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn)))
 	}
 }
 
@@ -94,25 +95,66 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.dealConn(rawConn.NewWebSocketConn(conn))
+		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
 	})
 	return http.ListenAndServe(addr, nil)
 }
 
-func (m *Model) dealConn(raw rawConn.RawConn) {
-	if raw == nil {
-		return
+func (m *Model) PushState(name string, data interface{}, verify bool) error {
+	// 首先验证推送数据是否符合物模型元信息
+	if verify {
+		if err := m.meta.VerifyState(name, data); err != nil {
+			return err
+		}
 	}
 
-	conn := &Connection{
-		raw: raw,
-		m:   m,
+	// 全状态名 = 模型名/状态名
+	fullName := strings.Join([]string{
+		m.meta.Name,
+		name,
+	}, "/")
+
+	// 向所有链路推送
+	m.connLock.RLock()
+	defer m.connLock.RUnlock()
+	for conn := range m.allConn {
+		conn.sendState(fullName, data)
 	}
 
+	return nil
+}
+
+func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
+	// 首先验证推送事件参数据是否符合物模型元信息
+	if verify {
+		if err := m.meta.VerifyEvent(name, args); err != nil {
+			return err
+		}
+	}
+
+	// 全事件名 = 模型名/事件名
+	fullName := strings.Join([]string{
+		m.meta.Name,
+		name,
+	}, "/")
+
+	// 向所有链路推送
+	m.connLock.RLock()
+	defer m.connLock.RUnlock()
+	for conn := range m.allConn {
+		conn.sendEvent(fullName, args)
+	}
+
+	return nil
+}
+
+func (m *Model) dealConn(conn *Connection) {
 	// 添加链接
 	m.addConn(conn)
+
 	// 处理接收
 	conn.dealReceive()
+
 	// 删除链接
 	m.removeConn(conn)
 }

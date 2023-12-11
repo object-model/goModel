@@ -4,18 +4,26 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"goModel/message"
 	"goModel/rawConn"
+	"sync"
 )
 
 type Connection struct {
 	m           *Model
-	raw         rawConn.RawConn
-	msgHandlers map[string]func([]byte)
+	writeLock   sync.Mutex              // 写入锁, 保护 raw
+	raw         rawConn.RawConn         // 原始连接
+	msgHandlers map[string]func([]byte) // 报文处理函数
+	statesLock  sync.RWMutex            // 保护 pubStates
+	pubStates   map[string]struct{}     // 发布状态列表
+	eventsLock  sync.RWMutex            // 保护 pubEvents
+	pubEvents   map[string]struct{}     // 发布事件列表
 }
 
 func newConn(m *Model, raw rawConn.RawConn) *Connection {
 	ans := &Connection{
-		m:   m,
-		raw: raw,
+		m:         m,
+		raw:       raw,
+		pubStates: make(map[string]struct{}),
+		pubEvents: make(map[string]struct{}),
 	}
 
 	ans.msgHandlers = map[string]func([]byte){
@@ -122,4 +130,31 @@ func (conn *Connection) onQueryMeta(payload []byte) {
 
 func (conn *Connection) onMetaInfo(payload []byte) {
 
+}
+
+func (conn *Connection) sendState(fullName string, data interface{}) {
+	conn.statesLock.RLock()
+	defer conn.statesLock.RUnlock()
+	if _, seen := conn.pubStates[fullName]; seen {
+		if msg, err := message.EncodeStateMsg(fullName, data); err == nil {
+			_ = conn.sendMsg(msg)
+		}
+	}
+}
+
+func (conn *Connection) sendEvent(fullName string, args message.Args) {
+	conn.eventsLock.RLock()
+	defer conn.eventsLock.RUnlock()
+	if _, seen := conn.pubStates[fullName]; seen {
+		if msg, err := message.EncodeEventMsg(fullName, args); err == nil {
+			_ = conn.sendMsg(msg)
+		}
+	}
+}
+
+func (conn *Connection) sendMsg(msg []byte) error {
+	conn.writeLock.Lock()
+	ans := conn.raw.WriteMsg(msg)
+	conn.writeLock.Unlock()
+	return ans
 }
