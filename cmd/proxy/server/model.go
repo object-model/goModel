@@ -6,23 +6,12 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"goModel/message"
 	"goModel/meta"
+	"goModel/rawConn"
 	"log"
-	"net"
 	"strings"
 	"sync"
 	"time"
 )
-
-type ModelConn interface {
-	Close() error
-	RemoteAddr() net.Addr
-
-	// ReadMsg 从物模型连接中读取完整的一包物模型报文并返回读取的报文和错误信息
-	ReadMsg() ([]byte, error)
-
-	// WriteMsg 将物模型报文msg通过连接发送到网络上
-	WriteMsg(msg []byte) error
-}
 
 type msg struct {
 	msgType  string
@@ -58,7 +47,7 @@ type subStateOrEventMessage struct {
 }
 
 type model struct {
-	ModelConn                                     // 原始连接
+	rawConn.RawConn                               // 原始连接
 	bufferQuit      chan struct{}                 // 退出 bufferMsgHandler 的信号
 	writerQuit      chan struct{}                 // 退出 writer 的信号
 	added           chan struct{}                 // 连接已经加入 Server 信号
@@ -95,7 +84,7 @@ func (m *model) Close() error {
 	m.bufferCloseOnce.Do(func() {
 		close(m.buffer)
 	})
-	return m.ModelConn.Close()
+	return m.RawConn.Close()
 }
 
 func (m *model) quitWriter() {

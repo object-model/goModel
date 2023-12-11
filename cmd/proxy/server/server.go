@@ -5,6 +5,7 @@ import (
 	"github.com/gorilla/websocket"
 	"goModel/message"
 	"goModel/meta"
+	"goModel/rawConn"
 	"io"
 	"log"
 	"net"
@@ -97,12 +98,12 @@ func (s *Server) ListenServeTCP(addr string) error {
 	}
 
 	for {
-		rawConn, err := l.AcceptTCP()
+		conn, err := l.AcceptTCP()
 		if err != nil {
 			return err
 		}
 
-		go s.addModelConnection(NewTcpConn(rawConn))
+		go s.addModelConnection(rawConn.NewTcpConn(conn))
 	}
 }
 
@@ -114,7 +115,7 @@ func (s *Server) ListenServeWebSocket(addr string) error {
 		if err != nil {
 			return
 		}
-		s.addModelConnection(NewWebSocketConn(conn))
+		s.addModelConnection(rawConn.NewWebSocketConn(conn))
 	})
 	return http.ListenAndServe(addr, nil)
 }
@@ -352,9 +353,9 @@ func onQuerySub(connections map[string]connection, querySubState querySubReq, is
 	}
 }
 
-func (s *Server) addModelConnection(conn ModelConn) {
+func (s *Server) addModelConnection(conn rawConn.RawConn) {
 	ans := &model{
-		ModelConn:      conn,
+		RawConn:        conn,
 		removeConnCh:   s.removeConnChan,
 		stateBroadcast: s.stateChan,
 		eventBroadcast: s.eventChan,
