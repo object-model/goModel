@@ -76,7 +76,7 @@ type model struct {
 	bufferQuitOnce  sync.Once                     // 保证 bufferQuit 只关闭一次
 	quitWriterOnce  sync.Once                     // 保证 writerQuit 只关闭一次
 	addedOnce       sync.Once                     // 保证 added 只关闭一次
-	MetaInfo        meta.Meta                     // 元信息
+	MetaInfo        *meta.Meta                    // 元信息
 	MetaRaw         []byte                        // 原始的元信息
 	log             *log.Logger                   // 记录收发数据
 	bufferCloseOnce sync.Once                     // 保证buffer仅关闭一次

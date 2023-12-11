@@ -1021,7 +1021,7 @@ func TestParseWithTemplateError(t *testing.T) {
 
 func TestParseOk(t *testing.T) {
 
-	meta := Meta{
+	meta := &Meta{
 		Name:        "A/car/#1/tpqs",
 		Description: "发射车调平起竖服务",
 		State: []ParamMeta{
