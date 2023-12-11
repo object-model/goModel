@@ -915,7 +915,7 @@ func (m *Meta) setTemplate(param TemplateParam) (err error) {
 	return
 }
 
-func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
+func Parse(rawData []byte, templateParam TemplateParam) (*Meta, error) {
 	// 1. 解析JSON数据
 	var value interface{}
 	json := jsoniter.ConfigCompatibleWithStandardLibrary
@@ -976,7 +976,7 @@ func Parse(rawData []byte, templateParam TemplateParam) (Meta, error) {
 		ans.Method = append(ans.Method, methodMeta)
 	}
 
-	return ans, nil
+	return &ans, nil
 }
 
 func check(root jsoniter.Any) error {
@@ -2056,7 +2056,7 @@ const empty = `
 }
 `
 
-func NewEmptyMeta() Meta {
+func NewEmptyMeta() *Meta {
 	ans, err := Parse([]byte(empty), TemplateParam{
 		"uuid": uuid.New().String(),
 	})
