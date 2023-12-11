@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	"proxy/message"
+	"goModel/message"
 	"reflect"
 	"strings"
 	"sync"

@@ -3,12 +3,12 @@ package server
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
+	"goModel/message"
+	"goModel/meta"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"proxy/message"
-	"proxy/meta"
 	"time"
 )
 

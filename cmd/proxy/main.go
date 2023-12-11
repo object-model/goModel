@@ -3,10 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"goModel/cmd/proxy/server"
 	"io"
 	"log"
 	"os"
-	"proxy/server"
 	"time"
 )
 

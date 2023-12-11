@@ -3,7 +3,7 @@ package server
 import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
-	"proxy/message"
+	"goModel/message"
 	"time"
 )
 
