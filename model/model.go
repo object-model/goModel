@@ -43,21 +43,21 @@ func NewEmptyModel() *Model {
 	}
 }
 
-func LoadFromFile(file string, tmpl meta.TemplateParam, reqHandler CallRequestFunc) (*Model, error) {
+func LoadFromFile(file string, tmpl meta.TemplateParam, onCall CallRequestFunc) (*Model, error) {
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		return NewEmptyModel(), err
 	}
 
-	return LoadFromBuff(content, tmpl, reqHandler)
+	return LoadFromBuff(content, tmpl, onCall)
 }
 
-func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, reqHandler CallRequestFunc) (*Model, error) {
+func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, onCall CallRequestFunc) (*Model, error) {
 	parsed, err := meta.Parse(buff, tmpl)
 
 	return &Model{
 		meta:           parsed,
-		callReqHandler: reqHandler,
+		callReqHandler: onCall,
 	}, err
 }
 
@@ -81,7 +81,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn), nil, nil))
+		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn), ConnCallback{}))
 	}
 }
 
@@ -92,7 +92,7 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn), nil, nil))
+		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn), ConnCallback{}))
 	})
 	return http.ListenAndServe(addr, nil)
 }
@@ -145,7 +145,7 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	return nil
 }
 
-func (m *Model) DialTcp(addr string, stateFunc StateFunc, eventFunc EventFunc) (*Connection, error) {
+func (m *Model) DialTcp(addr string, callback ConnCallback) (*Connection, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -155,19 +155,19 @@ func (m *Model) DialTcp(addr string, stateFunc StateFunc, eventFunc EventFunc) (
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewTcpConn(raw), stateFunc, eventFunc)
+	ans := newConn(m, rawConn.NewTcpConn(raw), callback)
 	go m.dealConn(ans)
 
 	return ans, nil
 }
 
-func (m *Model) DialWebSocket(addr string, stateFunc StateFunc, eventFunc EventFunc) (*Connection, error) {
+func (m *Model) DialWebSocket(addr string, callback ConnCallback) (*Connection, error) {
 	raw, _, err := websocket.DefaultDialer.Dial(addr, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewWebSocketConn(raw), stateFunc, eventFunc)
+	ans := newConn(m, rawConn.NewWebSocketConn(raw), callback)
 	go m.dealConn(ans)
 
 	return ans, nil

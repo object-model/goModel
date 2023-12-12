@@ -19,6 +19,9 @@ type StateFunc func(modelName string, stateName string, data []byte)
 // 参数eventName 为事件报文对应的状态名, 参数args为事件所携带参数.
 type EventFunc func(modelName string, eventName string, args message.RawArgs)
 
+// ClosedFunc 为连接关闭回调函数, 参数modelName为关闭原因
+type ClosedFunc func(reason string)
+
 type Connection struct {
 	m               *Model
 	writeLock       sync.Mutex                // 写入锁, 保护 raw
@@ -36,28 +39,40 @@ type Connection struct {
 	eventsQuited    chan struct{}             // dealEvent 完全退出信号
 	stateHandler    StateFunc                 // 状态处理回调
 	eventHandler    EventFunc                 // 事件处理回调
+	closedHandler   ClosedFunc                // 连接关闭处理函数
 }
 
-func newConn(m *Model, raw rawConn.RawConn, stateFunc StateFunc, eventFunc EventFunc) *Connection {
-	if stateFunc == nil {
-		stateFunc = func(string, string, []byte) {}
+type ConnCallback struct {
+	OnState  StateFunc
+	OnEvent  EventFunc
+	OnClosed ClosedFunc
+}
+
+func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
+	if callBack.OnState == nil {
+		callBack.OnState = func(string, string, []byte) {}
 	}
 
-	if eventFunc == nil {
-		eventFunc = func(string, string, message.RawArgs) {}
+	if callBack.OnEvent == nil {
+		callBack.OnEvent = func(string, string, message.RawArgs) {}
+	}
+
+	if callBack.OnClosed == nil {
+		callBack.OnClosed = func(string) {}
 	}
 
 	ans := &Connection{
-		m:            m,
-		raw:          raw,
-		pubStates:    make(map[string]struct{}),
-		pubEvents:    make(map[string]struct{}),
-		statesChan:   make(chan message.StatePayload, 256),
-		eventsChan:   make(chan message.EventPayload, 256),
-		statesQuited: make(chan struct{}),
-		eventsQuited: make(chan struct{}),
-		stateHandler: stateFunc,
-		eventHandler: eventFunc,
+		m:             m,
+		raw:           raw,
+		pubStates:     make(map[string]struct{}),
+		pubEvents:     make(map[string]struct{}),
+		statesChan:    make(chan message.StatePayload, 256),
+		eventsChan:    make(chan message.EventPayload, 256),
+		statesQuited:  make(chan struct{}),
+		eventsQuited:  make(chan struct{}),
+		stateHandler:  callBack.OnState,
+		eventHandler:  callBack.OnEvent,
+		closedHandler: callBack.OnClosed,
 	}
 
 	ans.msgHandlers = map[string]func([]byte){
@@ -84,12 +99,13 @@ func newConn(m *Model, raw rawConn.RawConn, stateFunc StateFunc, eventFunc Event
 }
 
 func (conn *Connection) Close() error {
-	return conn.raw.Close()
+	return conn.close("active close")
 }
 
 func (conn *Connection) dealReceive() {
+	reason := ""
 	defer func() {
-		_ = conn.Close()
+		_ = conn.close(reason)
 
 		conn.statesCloseOnce.Do(func() {
 			close(conn.statesChan)
@@ -104,12 +120,14 @@ func (conn *Connection) dealReceive() {
 	for {
 		data, err := conn.raw.ReadMsg()
 		if err != nil {
+			reason = err.Error()
 			break
 		}
 
 		msg := message.RawMessage{}
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
+			reason = err.Error()
 			break
 		}
 
@@ -118,6 +136,12 @@ func (conn *Connection) dealReceive() {
 		}
 
 	}
+}
+
+func (conn *Connection) close(reason string) error {
+	err := conn.raw.Close()
+	conn.closedHandler(reason)
+	return err
 }
 
 func (conn *Connection) onSetSubState(payload []byte) {
