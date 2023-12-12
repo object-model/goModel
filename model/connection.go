@@ -42,6 +42,7 @@ type Connection struct {
 	eventsQuited    chan struct{}             // dealEvent 完全退出信号
 	stateHandler    StateFunc                 // 状态处理回调
 	eventHandler    EventFunc                 // 事件处理回调
+	closedOnce      sync.Once                 // 确保 closedHandler 只调用一次
 	closedHandler   ClosedFunc                // 连接关闭处理函数
 	onMetaOnce      sync.Once                 // 确保只响应元信息报文一次
 	metaGotCh       chan struct{}             // 对端元信息已获取信号
@@ -198,7 +199,9 @@ func (conn *Connection) dealReceive() {
 
 func (conn *Connection) close(reason string) error {
 	err := conn.raw.Close()
-	conn.closedHandler(reason)
+	conn.closedOnce.Do(func() {
+		conn.closedHandler(reason)
+	})
 	return err
 }
 
