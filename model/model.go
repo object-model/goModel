@@ -84,7 +84,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn)))
+		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn), nil, nil))
 	}
 }
 
@@ -95,7 +95,7 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
+		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn), nil, nil))
 	})
 	return http.ListenAndServe(addr, nil)
 }

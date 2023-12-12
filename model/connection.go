@@ -17,18 +17,22 @@ type StateFunc func(modelName string, stateName string, data []byte)
 type EventFunc func(modelName string, eventName string, args message.RawArgs)
 
 type Connection struct {
-	m            *Model
-	writeLock    sync.Mutex                // 写入锁, 保护 raw
-	raw          rawConn.RawConn           // 原始连接
-	msgHandlers  map[string]func([]byte)   // 报文处理函数
-	statesLock   sync.RWMutex              // 保护 pubStates
-	pubStates    map[string]struct{}       // 发布状态列表
-	eventsLock   sync.RWMutex              // 保护 pubEvents
-	pubEvents    map[string]struct{}       // 发布事件列表
-	statesChan   chan message.StatePayload // 状态管道
-	eventsChan   chan message.EventPayload // 事件管道
-	stateHandler StateFunc                 // 状态处理回调
-	eventHandler EventFunc                 // 事件处理回调
+	m               *Model
+	writeLock       sync.Mutex                // 写入锁, 保护 raw
+	raw             rawConn.RawConn           // 原始连接
+	msgHandlers     map[string]func([]byte)   // 报文处理函数
+	statesLock      sync.RWMutex              // 保护 pubStates
+	pubStates       map[string]struct{}       // 发布状态列表
+	eventsLock      sync.RWMutex              // 保护 pubEvents
+	pubEvents       map[string]struct{}       // 发布事件列表
+	statesCloseOnce sync.Once                 // 确保 statesChan 只关闭一次
+	statesChan      chan message.StatePayload // 状态管道
+	statesQuited    chan struct{}             // dealState 完全退出信号
+	eventsCloseOnce sync.Once                 // 确保 eventsChan 只关闭一次
+	eventsChan      chan message.EventPayload // 事件管道
+	eventsQuited    chan struct{}             // dealEvent 完全退出信号
+	stateHandler    StateFunc                 // 状态处理回调
+	eventHandler    EventFunc                 // 事件处理回调
 }
 
 func newConn(m *Model, raw rawConn.RawConn, stateFunc StateFunc, eventFunc EventFunc) *Connection {
@@ -47,6 +51,8 @@ func newConn(m *Model, raw rawConn.RawConn, stateFunc StateFunc, eventFunc Event
 		pubEvents:    make(map[string]struct{}),
 		statesChan:   make(chan message.StatePayload, 256),
 		eventsChan:   make(chan message.EventPayload, 256),
+		statesQuited: make(chan struct{}),
+		eventsQuited: make(chan struct{}),
 		stateHandler: stateFunc,
 		eventHandler: eventFunc,
 	}
@@ -69,16 +75,32 @@ func newConn(m *Model, raw rawConn.RawConn, stateFunc StateFunc, eventFunc Event
 	}
 
 	go ans.dealState()
+	go ans.dealEvent()
 
 	return ans
 }
 
+func (conn *Connection) Close() error {
+	return conn.raw.Close()
+}
+
 func (conn *Connection) dealReceive() {
-	var closeReason string
+	defer func() {
+		_ = conn.Close()
+
+		conn.statesCloseOnce.Do(func() {
+			close(conn.statesChan)
+		})
+		conn.eventsCloseOnce.Do(func() {
+			close(conn.eventsChan)
+		})
+		<-conn.statesQuited
+		<-conn.eventsQuited
+	}()
+
 	for {
 		data, err := conn.raw.ReadMsg()
 		if err != nil {
-			closeReason = err.Error()
 			break
 		}
 
@@ -86,7 +108,6 @@ func (conn *Connection) dealReceive() {
 		json := jsoniter.ConfigCompatibleWithStandardLibrary
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
-			closeReason = "decode json message failed"
 			break
 		}
 
@@ -95,12 +116,6 @@ func (conn *Connection) dealReceive() {
 		}
 
 	}
-
-	conn.close(closeReason)
-}
-
-func (conn *Connection) close(reason string) {
-
 }
 
 func (conn *Connection) onSetSubState(payload []byte) {
@@ -197,6 +212,7 @@ func (conn *Connection) sendMsg(msg []byte) error {
 }
 
 func (conn *Connection) dealState() {
+	defer close(conn.statesQuited)
 	for state := range conn.statesChan {
 		i := strings.LastIndex(state.Name, "/")
 		if i == -1 {
@@ -210,6 +226,7 @@ func (conn *Connection) dealState() {
 }
 
 func (conn *Connection) dealEvent() {
+	defer close(conn.eventsQuited)
 	for event := range conn.eventsChan {
 		i := strings.LastIndex(event.Name, "/")
 		if i == -1 {
