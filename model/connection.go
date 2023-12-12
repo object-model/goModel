@@ -108,7 +108,6 @@ func (conn *Connection) dealReceive() {
 		}
 
 		msg := message.RawMessage{}
-		json := jsoniter.ConfigCompatibleWithStandardLibrary
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
 			break
@@ -122,35 +121,99 @@ func (conn *Connection) dealReceive() {
 }
 
 func (conn *Connection) onSetSubState(payload []byte) {
+	var states []string
+	if err := json.Unmarshal(payload, &states); err != nil {
+		return
+	}
 
+	ans := make(map[string]struct{})
+	for _, state := range states {
+		ans[state] = struct{}{}
+	}
+
+	conn.statesLock.Lock()
+	conn.pubStates = ans
+	conn.statesLock.Unlock()
 }
 
 func (conn *Connection) onAddSubState(payload []byte) {
+	var states []string
+	if err := json.Unmarshal(payload, &states); err != nil {
+		return
+	}
 
+	conn.statesLock.Lock()
+	for _, state := range states {
+		conn.pubStates[state] = struct{}{}
+	}
+	conn.statesLock.Unlock()
 }
 
 func (conn *Connection) onRemoveSubState(payload []byte) {
+	var states []string
+	if err := json.Unmarshal(payload, &states); err != nil {
+		return
+	}
 
+	conn.statesLock.Lock()
+	for _, state := range states {
+		delete(conn.pubStates, state)
+	}
+	conn.statesLock.Unlock()
 }
 
-func (conn *Connection) onClearSubState(payload []byte) {
-
+func (conn *Connection) onClearSubState([]byte) {
+	conn.statesLock.Lock()
+	conn.pubStates = make(map[string]struct{})
+	conn.statesLock.Unlock()
 }
 
 func (conn *Connection) onSetSubEvent(payload []byte) {
+	var events []string
+	if err := json.Unmarshal(payload, &events); err != nil {
+		return
+	}
 
+	ans := make(map[string]struct{})
+	for _, event := range events {
+		ans[event] = struct{}{}
+	}
+
+	conn.eventsLock.Lock()
+	conn.pubEvents = ans
+	conn.eventsLock.Unlock()
 }
 
 func (conn *Connection) onAddSubEvent(payload []byte) {
+	var events []string
+	if err := json.Unmarshal(payload, &events); err != nil {
+		return
+	}
 
+	conn.eventsLock.Lock()
+	for _, event := range events {
+		conn.pubEvents[event] = struct{}{}
+	}
+	conn.eventsLock.Unlock()
 }
 
 func (conn *Connection) onRemoveSubEvent(payload []byte) {
+	var events []string
+	if err := json.Unmarshal(payload, &events); err != nil {
+		return
+	}
 
+	conn.eventsLock.Lock()
+	for _, event := range events {
+		delete(conn.pubEvents, event)
+	}
+	conn.eventsLock.Unlock()
 }
 
-func (conn *Connection) onClearSubEvent(payload []byte) {
-
+func (conn *Connection) onClearSubEvent([]byte) {
+	conn.eventsLock.Lock()
+	conn.pubEvents = make(map[string]struct{})
+	conn.eventsLock.Unlock()
 }
 
 func (conn *Connection) onState(payload []byte) {
