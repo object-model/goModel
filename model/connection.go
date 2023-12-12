@@ -185,8 +185,9 @@ func (conn *Connection) onQueryMeta(payload []byte) {
 
 }
 
-func (conn *Connection) onMetaInfo(payload []byte) {
-
+func (conn *Connection) onMetaInfo([]byte) {
+	msg := message.Must(message.EncodeRawMsg("meta-info", conn.m.meta.ToJSON()))
+	_ = conn.sendMsg(msg)
 }
 
 func (conn *Connection) sendState(fullName string, data interface{}) {
