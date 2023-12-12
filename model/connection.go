@@ -1,7 +1,9 @@
 package model
 
 import (
+	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
 	"goModel/message"
 	"goModel/meta"
@@ -48,6 +50,8 @@ type Connection struct {
 	metaGotCh       chan struct{}             // 对端元信息已获取信号
 	peerMeta        *meta.Meta                // 对端的元信息
 	peerMetaErr     error                     // 查询对端元信息的错误
+	waitersLock     sync.Mutex                // 保护 respWaiters
+	respWaiters     map[string]*RespWaiter    // 所有未收到响应的调用等待器
 }
 
 // ConnOption 为创建连接选项
@@ -114,6 +118,7 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 		metaGotCh:     make(chan struct{}),
 		peerMeta:      meta.NewEmptyMeta(),
 		peerMetaErr:   fmt.Errorf("have NOT got peer meta yet"),
+		respWaiters:   make(map[string]*RespWaiter),
 	}
 
 	ans.msgHandlers = map[string]func([]byte){
@@ -205,6 +210,21 @@ func (conn *Connection) CancelAllSubEvent() error {
 		return err
 	}
 	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) CallAsync(fullName string, args message.Args) (*RespWaiter, error) {
+	uid := uuid.NewString()
+	msg, err := message.EncodeCallMsg(fullName, uid, args)
+	if err != nil {
+		return nil, err
+	}
+	waiter := conn.addRespWaiter(uid)
+	if err = conn.sendMsg(msg); err != nil {
+		conn.removeRespWaiter(uid)
+		return nil, err
+	}
+
+	return waiter, nil
 }
 
 func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
@@ -390,7 +410,24 @@ func (conn *Connection) onCall(payload []byte) {
 }
 
 func (conn *Connection) onResp(payload []byte) {
+	resp := message.ResponsePayload{}
+	if json.Unmarshal(payload, &resp) != nil {
+		return
+	}
 
+	waiter := conn.removeRespWaiter(resp.UUID)
+	if waiter == nil {
+		return
+	}
+
+	// error字段为空，则认为没出错
+	var err error = nil
+	if errStr := strings.TrimSpace(resp.Error); errStr != "" {
+		err = errors.New(errStr)
+	}
+
+	// 唤醒等待
+	waiter.wake(resp.Response, err)
 }
 
 func (conn *Connection) onQueryMeta(payload []byte) {
@@ -525,4 +562,21 @@ func (conn *Connection) dealCallReq(call message.CallPayload) {
 	if conn.sendMsg(msg) != nil {
 		// TODO: 发送失败是否需要写日志
 	}
+}
+
+func (conn *Connection) addRespWaiter(uuid string) *RespWaiter {
+	conn.waitersLock.Lock()
+	defer conn.waitersLock.Unlock()
+	waiter := &RespWaiter{
+		got: make(chan struct{}),
+	}
+	conn.respWaiters[uuid] = waiter
+	return waiter
+}
+
+func (conn *Connection) removeRespWaiter(uuid string) *RespWaiter {
+	conn.waitersLock.Lock()
+	defer conn.waitersLock.Unlock()
+	waiter := conn.respWaiters[uuid]
+	return waiter
 }
