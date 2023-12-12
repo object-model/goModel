@@ -4,12 +4,15 @@ import (
 	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"goModel/message"
+	"goModel/meta"
 	"goModel/rawConn"
 	"strings"
 	"sync"
 )
 
-var json = jsoniter.ConfigCompatibleWithStandardLibrary
+var (
+	json = jsoniter.ConfigCompatibleWithStandardLibrary
+)
 
 // StateFunc 为状态回调函数, 参数modelName为状态报文对应的物模型名称,
 // stateName 为状态报文对应的状态名, 参数data为状态数据.
@@ -40,6 +43,10 @@ type Connection struct {
 	stateHandler    StateFunc                 // 状态处理回调
 	eventHandler    EventFunc                 // 事件处理回调
 	closedHandler   ClosedFunc                // 连接关闭处理函数
+	onMetaOnce      sync.Once                 // 确保只响应元信息报文一次
+	metaGotCh       chan struct{}             // 对端元信息已获取信号
+	peerMeta        *meta.Meta                // 对端的元信息
+	peerMetaErr     error                     // 查询对端元信息的错误
 }
 
 type ConnCallback struct {
@@ -73,6 +80,9 @@ func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
 		stateHandler:  callBack.OnState,
 		eventHandler:  callBack.OnEvent,
 		closedHandler: callBack.OnClosed,
+		metaGotCh:     make(chan struct{}),
+		peerMeta:      meta.NewEmptyMeta(),
+		peerMetaErr:   fmt.Errorf("have NOT got peer meta yet"),
 	}
 
 	ans.msgHandlers = map[string]func([]byte){
@@ -96,6 +106,20 @@ func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
 	go ans.dealEvent()
 
 	return ans
+}
+
+func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
+	select {
+	case <-conn.metaGotCh:
+		return conn.peerMeta, conn.peerMetaErr
+	default:
+		err := conn.sendMsg(message.EncodeQueryMetaMsg())
+		if err != nil {
+			return conn.peerMeta, fmt.Errorf("send query-meta message failed")
+		}
+		<-conn.metaGotCh
+		return conn.peerMeta, conn.peerMetaErr
+	}
 }
 
 func (conn *Connection) Close() error {
@@ -269,7 +293,9 @@ func (conn *Connection) onResp(payload []byte) {
 }
 
 func (conn *Connection) onQueryMeta(payload []byte) {
-
+	conn.onMetaOnce.Do(func() {
+		conn.peerMeta, conn.peerMetaErr = meta.Parse(payload, nil)
+	})
 }
 
 func (conn *Connection) onMetaInfo([]byte) {
