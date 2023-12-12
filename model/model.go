@@ -161,6 +161,18 @@ func (m *Model) DialTcp(addr string, stateFunc StateFunc, eventFunc EventFunc) (
 	return ans, nil
 }
 
+func (m *Model) DialWebSocket(addr string, stateFunc StateFunc, eventFunc EventFunc) (*Connection, error) {
+	raw, _, err := websocket.DefaultDialer.Dial(addr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	ans := newConn(m, rawConn.NewWebSocketConn(raw), stateFunc, eventFunc)
+	go m.dealConn(ans)
+
+	return ans, nil
+}
+
 func (m *Model) dealConn(conn *Connection) {
 	// 添加链接
 	m.addConn(conn)
