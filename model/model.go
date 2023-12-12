@@ -37,14 +37,17 @@ type Model struct {
 	callReqHandler CallRequestFunc          // 调用请求处理函数
 }
 
+// ModelOption 为物模型创建选项
 type ModelOption func(*Model)
 
+// WithCallReq 配置物模型的调用请求回调函数
 func WithCallReq(onCall CallRequestFunc) ModelOption {
 	return func(model *Model) {
 		model.callReqHandler = onCall
 	}
 }
 
+// WithVerifyResp 开启物模型的响应校验选项
 func WithVerifyResp() ModelOption {
 	return func(model *Model) {
 		model.verifyResp = true
@@ -103,7 +106,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn), ConnCallback{}))
+		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn)))
 	}
 }
 
@@ -114,7 +117,7 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn), ConnCallback{}))
+		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
 	})
 	return http.ListenAndServe(addr, nil)
 }
@@ -167,7 +170,7 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	return nil
 }
 
-func (m *Model) DialTcp(addr string, callback ConnCallback) (*Connection, error) {
+func (m *Model) DialTcp(addr string, opts ...ConnOption) (*Connection, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -177,19 +180,19 @@ func (m *Model) DialTcp(addr string, callback ConnCallback) (*Connection, error)
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewTcpConn(raw), callback)
+	ans := newConn(m, rawConn.NewTcpConn(raw), opts...)
 	go m.dealConn(ans)
 
 	return ans, nil
 }
 
-func (m *Model) DialWebSocket(addr string, callback ConnCallback) (*Connection, error) {
+func (m *Model) DialWebSocket(addr string, opts ...ConnOption) (*Connection, error) {
 	raw, _, err := websocket.DefaultDialer.Dial(addr, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewWebSocketConn(raw), callback)
+	ans := newConn(m, rawConn.NewWebSocketConn(raw), opts...)
 	go m.dealConn(ans)
 
 	return ans, nil

@@ -49,25 +49,55 @@ type Connection struct {
 	peerMetaErr     error                     // 查询对端元信息的错误
 }
 
-type ConnCallback struct {
-	OnState  StateFunc
-	OnEvent  EventFunc
-	OnClosed ClosedFunc
+// ConnOption 为创建连接选项
+type ConnOption func(*Connection)
+
+// WithStateFunc 配置连接的状态报文回调函数
+func WithStateFunc(onState StateFunc) ConnOption {
+	return func(connection *Connection) {
+		if onState != nil {
+			connection.stateHandler = onState
+		}
+	}
 }
 
-func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
-	if callBack.OnState == nil {
-		callBack.OnState = func(string, string, []byte) {}
+// WithEventFunc 配置连接的事件报文回调函数
+func WithEventFunc(onEvent EventFunc) ConnOption {
+	return func(connection *Connection) {
+		if onEvent != nil {
+			connection.eventHandler = onEvent
+		}
 	}
+}
 
-	if callBack.OnEvent == nil {
-		callBack.OnEvent = func(string, string, message.RawArgs) {}
+// WithClosedFunc 配置连接的关闭回调函数
+func WithClosedFunc(onClose ClosedFunc) ConnOption {
+	return func(connection *Connection) {
+		if onClose != nil {
+			connection.closedHandler = onClose
+		}
 	}
+}
 
-	if callBack.OnClosed == nil {
-		callBack.OnClosed = func(string) {}
+// WithStateBuffSize 配置连接的状态管道的大小
+func WithStateBuffSize(size int) ConnOption {
+	return func(connection *Connection) {
+		if size > 0 {
+			connection.statesChan = make(chan message.StatePayload, size)
+		}
 	}
+}
 
+// WithEventBuffSize 配置连接的事件管道的大小
+func WithEventBuffSize(size int) ConnOption {
+	return func(connection *Connection) {
+		if size > 0 {
+			connection.eventsChan = make(chan message.EventPayload, size)
+		}
+	}
+}
+
+func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 	ans := &Connection{
 		m:             m,
 		raw:           raw,
@@ -77,9 +107,9 @@ func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
 		eventsChan:    make(chan message.EventPayload, 256),
 		statesQuited:  make(chan struct{}),
 		eventsQuited:  make(chan struct{}),
-		stateHandler:  callBack.OnState,
-		eventHandler:  callBack.OnEvent,
-		closedHandler: callBack.OnClosed,
+		stateHandler:  func(string, string, []byte) {},
+		eventHandler:  func(string, string, message.RawArgs) {},
+		closedHandler: func(string) {},
 		metaGotCh:     make(chan struct{}),
 		peerMeta:      meta.NewEmptyMeta(),
 		peerMetaErr:   fmt.Errorf("have NOT got peer meta yet"),
@@ -100,6 +130,10 @@ func newConn(m *Model, raw rawConn.RawConn, callBack ConnCallback) *Connection {
 		"response":               ans.onResp,
 		"query-meta":             ans.onQueryMeta,
 		"meta-info":              ans.onMetaInfo,
+	}
+
+	for _, option := range opts {
+		option(ans)
 	}
 
 	go ans.dealState()
