@@ -414,11 +414,11 @@ func splitModelName(fullName string) (string, string, error) {
 		return "", "", fmt.Errorf("%q missing '/'", fullName)
 	}
 
-	if strings.Trim(fullName[:index], " \t\n\r\f\v") == "" {
+	if strings.TrimSpace(fullName[:index]) == "" {
 		return "", "", fmt.Errorf("no model name in %q", fullName)
 	}
 
-	if strings.Trim(fullName[index+1:], " \t\n\n\f\v") == "" {
+	if strings.TrimSpace(fullName[index+1:]) == "" {
 		return "", "", fmt.Errorf("no method name in %q", fullName)
 	}
 
