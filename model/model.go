@@ -26,6 +26,7 @@ type ServiceTCPAddr struct {
 }
 
 // CallRequestFunc 为调用请求回调函数, 参数name为调用的方法名, 参数args为调用参数
+// 函数返回值为调用请求的返回值.
 type CallRequestFunc func(name string, args message.RawArgs) message.Resp
 
 type Model struct {
@@ -142,6 +143,22 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	}
 
 	return nil
+}
+
+func (m *Model) DialTcp(addr string, stateFunc StateFunc, eventFunc EventFunc) (*Connection, error) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := net.DialTCP("tcp", nil, tcpAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	ans := newConn(m, rawConn.NewTcpConn(raw), stateFunc, eventFunc)
+	go m.dealConn(ans)
+
+	return ans, nil
 }
 
 func (m *Model) dealConn(conn *Connection) {
