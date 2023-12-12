@@ -26,7 +26,7 @@ type ServiceTCPAddr struct {
 }
 
 // CallRequestFunc 为调用请求回调函数, 参数name为调用的方法名, 参数args为调用参数
-type CallRequestFunc func(name string, args message.RawArgs)
+type CallRequestFunc func(name string, args message.RawArgs) message.Resp
 
 type Model struct {
 	meta           *meta.Meta               // 元信息
@@ -38,7 +38,7 @@ type Model struct {
 func NewEmptyModel() *Model {
 	return &Model{
 		meta:           meta.NewEmptyMeta(),
-		callReqHandler: func(string, message.RawArgs) {},
+		callReqHandler: nil,
 	}
 }
 
@@ -52,10 +52,6 @@ func LoadFromFile(file string, tmpl meta.TemplateParam, reqHandler CallRequestFu
 }
 
 func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, reqHandler CallRequestFunc) (*Model, error) {
-	if reqHandler == nil {
-		reqHandler = func(string, message.RawArgs) {}
-	}
-
 	parsed, err := meta.Parse(buff, tmpl)
 
 	return &Model{

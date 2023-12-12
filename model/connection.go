@@ -1,12 +1,15 @@
 package model
 
 import (
+	"fmt"
 	jsoniter "github.com/json-iterator/go"
 	"goModel/message"
 	"goModel/rawConn"
 	"strings"
 	"sync"
 )
+
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // StateFunc 为状态回调函数, 参数modelName为状态报文对应的物模型名称,
 // stateName 为状态报文对应的状态名, 参数data为状态数据.
@@ -152,7 +155,6 @@ func (conn *Connection) onClearSubEvent(payload []byte) {
 
 func (conn *Connection) onState(payload []byte) {
 	state := message.StatePayload{}
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	if json.Unmarshal(payload, &state) != nil {
 		return
 	}
@@ -161,7 +163,6 @@ func (conn *Connection) onState(payload []byte) {
 
 func (conn *Connection) onEvent(payload []byte) {
 	event := message.EventPayload{}
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	if json.Unmarshal(payload, &event) != nil {
 		return
 	}
@@ -169,7 +170,11 @@ func (conn *Connection) onEvent(payload []byte) {
 }
 
 func (conn *Connection) onCall(payload []byte) {
-
+	call := message.CallPayload{}
+	if json.Unmarshal(payload, &call) != nil {
+		return
+	}
+	go conn.dealCallReq(call)
 }
 
 func (conn *Connection) onResp(payload []byte) {
@@ -236,5 +241,72 @@ func (conn *Connection) dealEvent() {
 		eventName := event.Name[i+1:]
 
 		conn.eventHandler(modelName, eventName, event.Args)
+	}
+}
+
+func (conn *Connection) dealCallReq(call message.CallPayload) {
+	// 1.获取调用参数信息
+	fullName := call.Name
+	uuidStr := call.UUID
+	args := call.Args
+
+	// 2.分解模型名和方法名
+	i := strings.LastIndex(fullName, "/")
+	if i == -1 {
+		resp := message.Must(message.EncodeRespMsg(uuidStr,
+			"fullName is invalid format",
+			message.Resp{}))
+		_ = conn.sendMsg(resp)
+		return
+	}
+
+	modelName := fullName[:i]
+	methodName := fullName[i+1:]
+
+	// 3.校验模型名称是否匹配
+	if modelName != conn.m.meta.Name {
+		resp := message.Must(message.EncodeRespMsg(uuidStr,
+			fmt.Sprintf("modelName %q: unmatched", modelName),
+			message.Resp{}))
+		_ = conn.sendMsg(resp)
+		return
+	}
+
+	// 4. 校验调用请求参数
+	if err := conn.m.meta.VerifyRawMethodArgs(methodName, args); err != nil {
+		resp := message.Must(message.EncodeRespMsg(uuidStr,
+			err.Error(),
+			message.Resp{}))
+		_ = conn.sendMsg(resp)
+		return
+	}
+
+	// 5.没有注册回调，直接返回错误信息
+	if conn.m.callReqHandler == nil {
+		resp := message.Must(message.EncodeRespMsg(uuidStr,
+			"NO callback",
+			message.Resp{}))
+		_ = conn.sendMsg(resp)
+		return
+	}
+
+	// 6.调用回调
+	resp := conn.m.callReqHandler(methodName, args)
+
+	// 7.校验响应
+	// TODO: 添加开关，控制是否开启响应校验
+	errStr := ""
+	err := conn.m.meta.VerifyMethodResp(methodName, resp)
+	if err != nil {
+		errStr = err.Error()
+	}
+
+	// 8.发送响应
+	msg := message.Must(message.EncodeRespMsg(uuidStr,
+		errStr,
+		resp))
+
+	if conn.sendMsg(msg) != nil {
+		// TODO: 发送失败是否需要写日志
 	}
 }
