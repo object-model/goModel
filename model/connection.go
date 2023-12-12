@@ -408,11 +408,12 @@ func (conn *Connection) dealCallReq(call message.CallPayload) {
 	resp := conn.m.callReqHandler(methodName, args)
 
 	// 7.校验响应
-	// TODO: 添加开关，控制是否开启响应校验
 	errStr := ""
-	err := conn.m.meta.VerifyMethodResp(methodName, resp)
-	if err != nil {
-		errStr = err.Error()
+	if conn.m.verifyResp {
+		err := conn.m.meta.VerifyMethodResp(methodName, resp)
+		if err != nil {
+			errStr = err.Error()
+		}
 	}
 
 	// 8.发送响应

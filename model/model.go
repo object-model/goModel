@@ -31,34 +31,56 @@ type CallRequestFunc func(name string, args message.RawArgs) message.Resp
 
 type Model struct {
 	meta           *meta.Meta               // 元信息
-	callReqHandler CallRequestFunc          // 调用请求处理函数
 	connLock       sync.RWMutex             // 保护 allConn
 	allConn        map[*Connection]struct{} // 所有连接
+	verifyResp     bool                     // 是否校验 callReqHandler 返回的响应返回值
+	callReqHandler CallRequestFunc          // 调用请求处理函数
 }
 
-func NewEmptyModel() *Model {
-	return &Model{
-		meta:           meta.NewEmptyMeta(),
-		callReqHandler: nil,
+type ModelOption func(*Model)
+
+func WithCallReq(onCall CallRequestFunc) ModelOption {
+	return func(model *Model) {
+		model.callReqHandler = onCall
 	}
 }
 
-func LoadFromFile(file string, tmpl meta.TemplateParam, onCall CallRequestFunc) (*Model, error) {
+func WithVerifyResp() ModelOption {
+	return func(model *Model) {
+		model.verifyResp = true
+	}
+}
+
+func NewEmptyModel() *Model {
+	return New(meta.NewEmptyMeta())
+}
+
+func LoadFromFile(file string, tmpl meta.TemplateParam, opts ...ModelOption) (*Model, error) {
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
 		return NewEmptyModel(), err
 	}
 
-	return LoadFromBuff(content, tmpl, onCall)
+	return LoadFromBuff(content, tmpl, opts...)
 }
 
-func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, onCall CallRequestFunc) (*Model, error) {
+func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, opts ...ModelOption) (*Model, error) {
 	parsed, err := meta.Parse(buff, tmpl)
 
-	return &Model{
-		meta:           parsed,
-		callReqHandler: onCall,
-	}, err
+	return New(parsed, opts...), err
+}
+
+func New(meta *meta.Meta, opts ...ModelOption) *Model {
+	ans := &Model{
+		meta:    meta,
+		allConn: make(map[*Connection]struct{}),
+	}
+
+	for _, opt := range opts {
+		opt(ans)
+	}
+
+	return ans
 }
 
 func (m *Model) Meta() *meta.Meta {
