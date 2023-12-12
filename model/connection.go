@@ -143,6 +143,70 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 	return ans
 }
 
+func (conn *Connection) SubState(states []string) error {
+	msg, err := message.EncodeSubStateMsg(message.SetSub, states)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) AddSubState(states []string) error {
+	msg, err := message.EncodeSubStateMsg(message.AddSub, states)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) CancelSubState(states []string) error {
+	msg, err := message.EncodeSubStateMsg(message.RemoveSub, states)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) CancelAllSubState() error {
+	msg, err := message.EncodeSubStateMsg(message.RemoveSub, nil)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) SubEvent(events []string) error {
+	msg, err := message.EncodeSubEventMsg(message.SetSub, events)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) AddSubEvent(events []string) error {
+	msg, err := message.EncodeSubEventMsg(message.AddSub, events)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) CancelSubEvent(events []string) error {
+	msg, err := message.EncodeSubEventMsg(message.RemoveSub, events)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
+func (conn *Connection) CancelAllSubEvent() error {
+	msg, err := message.EncodeSubEventMsg(message.RemoveSub, nil)
+	if err != nil {
+		return err
+	}
+	return conn.sendMsg(msg)
+}
+
 func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
 	select {
 	case <-conn.metaGotCh:
