@@ -5,6 +5,8 @@ import (
 	jsoniter "github.com/json-iterator/go"
 )
 
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
 const (
 	SetSub    = iota // 设置订阅
 	AddSub           // 添加订阅
@@ -121,7 +123,6 @@ func EncodeSubStateMsg(Type int, items []string) ([]byte, error) {
 		Payload: items,
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	ans, _ := json.Marshal(msg)
 
 	return ans, nil
@@ -152,7 +153,6 @@ func EncodeSubEventMsg(Type int, items []string) ([]byte, error) {
 		Payload: items,
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	ans, _ := json.Marshal(msg)
 
 	return ans, nil
@@ -197,7 +197,6 @@ func EncodeEventMsg(eventName string, args Args) ([]byte, error) {
 		},
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	ans, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode event args failed")
@@ -222,7 +221,6 @@ func EncodeCallMsg(methodName string, uuid string, args Args) ([]byte, error) {
 		},
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	ans, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode call args failed")
@@ -247,7 +245,6 @@ func EncodeRespMsg(uuid string, errStr string, resp Resp) ([]byte, error) {
 		},
 	}
 
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	ans, err := json.Marshal(msg)
 	if err != nil {
 		return nil, fmt.Errorf("encode call response failed")
@@ -264,7 +261,6 @@ func EncodeQueryMetaMsg() []byte {
 // EncodeRawMsg 编码一个报文类型为Type,报文数据域为payload的JSON报文,
 // 返回JSON编码后的全报文数据和错误信息
 func EncodeRawMsg(Type string, payload jsoniter.RawMessage) ([]byte, error) {
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	var value interface{}
 	if err := json.Unmarshal(payload, &value); err != nil {
 		return nil, fmt.Errorf("invalid payload")

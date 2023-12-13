@@ -22,6 +22,8 @@ var validType = map[string]struct{}{
 	"meta":   {},
 }
 
+var json = jsoniter.ConfigCompatibleWithStandardLibrary
+
 type OptionInfo struct {
 	Value       interface{} `json:"value"`
 	Description string      `json:"description"`
@@ -116,7 +118,7 @@ func (m *Meta) AllMethods() []string {
 // ToJSON 将物模型元信息m序列化JSON串.
 func (m *Meta) ToJSON() []byte {
 	m.encodeOnce.Do(func() {
-		data, err := jsoniter.Marshal(m)
+		data, err := json.Marshal(m)
 		if err != nil {
 			panic(err)
 		}
@@ -589,7 +591,6 @@ func (m *Meta) VerifyRawMethodResp(name string, response message.RawResp) error 
 func verifyRawData(meta ParamMeta, data []byte) error {
 	// data必须是有效的JSON数据
 	var value interface{}
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	if err := json.Unmarshal(data, &value); err != nil {
 		return fmt.Errorf("invalid JSON data")
 	}
@@ -918,7 +919,6 @@ func (m *Meta) setTemplate(param TemplateParam) (err error) {
 func Parse(rawData []byte, templateParam TemplateParam) (*Meta, error) {
 	// 1. 解析JSON数据
 	var value interface{}
-	json := jsoniter.ConfigCompatibleWithStandardLibrary
 	if err := json.Unmarshal(rawData, &value); err != nil {
 		return NewEmptyMeta(), fmt.Errorf("parse JSON failed")
 	}
