@@ -31,6 +31,7 @@ type RespFunc func(resp message.RawResp, err error)
 // ClosedFunc 为连接关闭回调函数, 参数modelName为关闭原因
 type ClosedFunc func(reason string)
 
+// Connection 为物模型连接,可以通过连接订阅状态和事件、注册状态和事件回调、远程调用方法、查询对端元信息.
 type Connection struct {
 	m               *Model
 	writeLock       sync.Mutex                // 写入锁, 保护 raw
@@ -152,6 +153,7 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 	return ans
 }
 
+// SubState 通过连接conn发送状态订阅报文,订阅状态列表states中的所有状态,并返回错误信息.
 func (conn *Connection) SubState(states []string) error {
 	msg, err := message.EncodeSubStateMsg(message.SetSub, states)
 	if err != nil {
@@ -160,6 +162,7 @@ func (conn *Connection) SubState(states []string) error {
 	return conn.sendMsg(msg)
 }
 
+// AddSubState 通过连接conn发送添加状态订阅报文,新增对状态列表states中的所有状态的订阅,并返回错误信息.
 func (conn *Connection) AddSubState(states []string) error {
 	msg, err := message.EncodeSubStateMsg(message.AddSub, states)
 	if err != nil {
@@ -168,6 +171,7 @@ func (conn *Connection) AddSubState(states []string) error {
 	return conn.sendMsg(msg)
 }
 
+// CancelSubState 通过连接conn发送取消状态订阅报文,取消对状态列表states中所有状态的订阅,并返回错误信息.
 func (conn *Connection) CancelSubState(states []string) error {
 	msg, err := message.EncodeSubStateMsg(message.RemoveSub, states)
 	if err != nil {
@@ -176,6 +180,7 @@ func (conn *Connection) CancelSubState(states []string) error {
 	return conn.sendMsg(msg)
 }
 
+// CancelAllSubState 通过连接conn发送取消所有状态订阅报文,取消对所有状态的订阅,并返回错误信息.
 func (conn *Connection) CancelAllSubState() error {
 	msg, err := message.EncodeSubStateMsg(message.RemoveSub, nil)
 	if err != nil {
@@ -184,6 +189,7 @@ func (conn *Connection) CancelAllSubState() error {
 	return conn.sendMsg(msg)
 }
 
+// SubEvent 通过连接conn发送事件订阅报文,订阅事件列表events中所有事件,并返回错误信息.
 func (conn *Connection) SubEvent(events []string) error {
 	msg, err := message.EncodeSubEventMsg(message.SetSub, events)
 	if err != nil {
@@ -192,6 +198,7 @@ func (conn *Connection) SubEvent(events []string) error {
 	return conn.sendMsg(msg)
 }
 
+// AddSubEvent 通过连接conn发送添加事件订阅报文,新增对事件列表events中所有事件的订阅,并返回错误信息.
 func (conn *Connection) AddSubEvent(events []string) error {
 	msg, err := message.EncodeSubEventMsg(message.AddSub, events)
 	if err != nil {
@@ -200,6 +207,7 @@ func (conn *Connection) AddSubEvent(events []string) error {
 	return conn.sendMsg(msg)
 }
 
+// CancelSubEvent 通过连接conn发送取消事件订阅报文,取消对事件列表events中所有事件的订阅,并返回错误信息.
 func (conn *Connection) CancelSubEvent(events []string) error {
 	msg, err := message.EncodeSubEventMsg(message.RemoveSub, events)
 	if err != nil {
@@ -208,6 +216,7 @@ func (conn *Connection) CancelSubEvent(events []string) error {
 	return conn.sendMsg(msg)
 }
 
+// CancelAllSubEvent 通过连接conn发送取消所有事件订阅报文,取消对所有事件的订阅,并返回错误信息.
 func (conn *Connection) CancelAllSubEvent() error {
 	msg, err := message.EncodeSubEventMsg(message.RemoveSub, nil)
 	if err != nil {
@@ -216,6 +225,8 @@ func (conn *Connection) CancelAllSubEvent() error {
 	return conn.sendMsg(msg)
 }
 
+// Invoke 通过连接conn发送调用请求报文,以异步的方式远程调用名为fullName的方法,调用参数为args,
+// 返回用于等待该次调用的响应的等待对象和错误信息. 出错时该函数返回的等待对象为nil.
 func (conn *Connection) Invoke(fullName string, args message.Args) (*RespWaiter, error) {
 	uid := uuid.NewString()
 	msg, err := message.EncodeCallMsg(fullName, uid, args)
@@ -231,6 +242,8 @@ func (conn *Connection) Invoke(fullName string, args message.Args) (*RespWaiter,
 	return waiter, nil
 }
 
+// InvokeByCallback 异步调用名为fullName的方法,调用参数为args,当收到对应的响应报文时会调用onResp.
+// 若该函数返回的错误信息不为nil, 则表示调用请求发送失败, 回调onResp不会被触发.
 func (conn *Connection) InvokeByCallback(fullName string, args message.Args, onResp RespFunc) error {
 	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
@@ -246,6 +259,10 @@ func (conn *Connection) InvokeByCallback(fullName string, args message.Args, onR
 	return nil
 }
 
+// InvokeFor 异步调用名为fullName的方法,调用参数为args,当收到对应的响应报文时会调用onResp.
+// 若该函数返回的错误信息不为nil, 则表示调用请求发送失败, 回调onResp不会被触发.
+// InvokeFor 与 InvokeByCallback 的区别是, InvokeFor 在后台等待响应报文时,有超时时间为timeout的限制,
+// 若在timeout时间内未收到对应的响应报文,则会调用onResp,调用返回值为空,错误信息为超时.
 func (conn *Connection) InvokeFor(fullName string, args message.Args, onResp RespFunc, timeout time.Duration) error {
 	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
@@ -261,6 +278,8 @@ func (conn *Connection) InvokeFor(fullName string, args message.Args, onResp Res
 	return nil
 }
 
+// Call 通过连接conn发送调用请求报文,以同步的方式远程调用名为fullName的方法,调用参数为args,等待调用响应报文的返回.
+// Call 在成功发送调用请求报文后会一直等待,直到收到调用响应报文或者连接关闭再返回.
 func (conn *Connection) Call(fullName string, args message.Args) (message.RawResp, error) {
 	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
@@ -270,6 +289,8 @@ func (conn *Connection) Call(fullName string, args message.Args) (message.RawRes
 	return waiter.Wait()
 }
 
+// CallFor 通过连接conn发送调用请求报文,以同步的方式远程调用名为fullName的方法,调用参数为args,等待调用响应报文的返回.
+// CallFor 和 Call 类似, 都会阻塞式地等待调用响应报文, 只不过 CallFor 有等待超时时间为timeout的限制.
 func (conn *Connection) CallFor(fullName string, args message.Args, timeout time.Duration) (message.RawResp, error) {
 	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
@@ -278,6 +299,8 @@ func (conn *Connection) CallFor(fullName string, args message.Args, timeout time
 	return waiter.WaitFor(timeout)
 }
 
+// GetPeerMeta 阻塞式地获取对端的元信息,若先前已经收到对端的元信息报文,则直接返回不再发送查询元信息报文.
+// 该函数会阻塞式地等待, 直到收到对端元信息或者连接关闭.
 func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
 	select {
 	case <-conn.metaGotCh:
@@ -292,6 +315,7 @@ func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
 	}
 }
 
+// Close 关闭连接.
 func (conn *Connection) Close() error {
 	return conn.close("active close")
 }
