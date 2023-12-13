@@ -25,6 +25,9 @@ type StateFunc func(modelName string, stateName string, data []byte)
 // 参数eventName 为事件报文对应的状态名, 参数args为事件所携带参数.
 type EventFunc func(modelName string, eventName string, args message.RawArgs)
 
+// RespFunc 为响应回调函数, 参数resp为响应原始数据, 参数err为响应错误信息
+type RespFunc func(resp message.RawResp, err error)
+
 // ClosedFunc 为连接关闭回调函数, 参数modelName为关闭原因
 type ClosedFunc func(reason string)
 
@@ -213,7 +216,7 @@ func (conn *Connection) CancelAllSubEvent() error {
 	return conn.sendMsg(msg)
 }
 
-func (conn *Connection) CallAsync(fullName string, args message.Args) (*RespWaiter, error) {
+func (conn *Connection) Invoke(fullName string, args message.Args) (*RespWaiter, error) {
 	uid := uuid.NewString()
 	msg, err := message.EncodeCallMsg(fullName, uid, args)
 	if err != nil {
@@ -222,14 +225,44 @@ func (conn *Connection) CallAsync(fullName string, args message.Args) (*RespWait
 	waiter := conn.addRespWaiter(uid)
 	if err = conn.sendMsg(msg); err != nil {
 		conn.removeRespWaiter(uid)
-		return nil, err
+		return nil, errors.New("send call request failed")
 	}
 
 	return waiter, nil
 }
 
-func (conn *Connection) CallSync(fullName string, args message.Args) (message.RawResp, error) {
-	waiter, err := conn.CallAsync(fullName, args)
+func (conn *Connection) InvokeByCallback(fullName string, args message.Args, onResp RespFunc) error {
+	waiter, err := conn.Invoke(fullName, args)
+	if err != nil {
+		return err
+	}
+
+	if onResp != nil {
+		go func() {
+			onResp(waiter.Wait())
+		}()
+	}
+
+	return nil
+}
+
+func (conn *Connection) InvokeFor(fullName string, args message.Args, onResp RespFunc, timeout time.Duration) error {
+	waiter, err := conn.Invoke(fullName, args)
+	if err != nil {
+		return err
+	}
+
+	if onResp != nil {
+		go func() {
+			onResp(waiter.WaitFor(timeout))
+		}()
+	}
+
+	return nil
+}
+
+func (conn *Connection) Call(fullName string, args message.Args) (message.RawResp, error) {
+	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
 		return message.RawResp{}, err
 	}
@@ -237,8 +270,8 @@ func (conn *Connection) CallSync(fullName string, args message.Args) (message.Ra
 	return waiter.Wait()
 }
 
-func (conn *Connection) CallSyncFor(fullName string, args message.Args, timeout time.Duration) (message.RawResp, error) {
-	waiter, err := conn.CallAsync(fullName, args)
+func (conn *Connection) CallFor(fullName string, args message.Args, timeout time.Duration) (message.RawResp, error) {
+	waiter, err := conn.Invoke(fullName, args)
 	if err != nil {
 		return message.RawResp{}, err
 	}
@@ -300,7 +333,13 @@ func (conn *Connection) dealReceive() {
 }
 
 func (conn *Connection) close(reason string) error {
+	// NOTE: 关闭前需要唤醒所有等待者, 避免不必要的等待
+	conn.notifyRespWaiterOnClose(reason)
+	conn.notifyMetaWaiterOnClose(reason)
+
 	err := conn.raw.Close()
+
+	// 调用关闭回调
 	conn.closedOnce.Do(func() {
 		conn.closedHandler(reason)
 	})
@@ -448,15 +487,16 @@ func (conn *Connection) onResp(payload []byte) {
 	waiter.wake(resp.Response, err)
 }
 
-func (conn *Connection) onQueryMeta(payload []byte) {
-	conn.onMetaOnce.Do(func() {
-		conn.peerMeta, conn.peerMetaErr = meta.Parse(payload, nil)
-	})
-}
-
-func (conn *Connection) onMetaInfo([]byte) {
+func (conn *Connection) onQueryMeta([]byte) {
 	msg := message.Must(message.EncodeRawMsg("meta-info", conn.m.meta.ToJSON()))
 	_ = conn.sendMsg(msg)
+}
+
+func (conn *Connection) onMetaInfo(payload []byte) {
+	conn.onMetaOnce.Do(func() {
+		conn.peerMeta, conn.peerMetaErr = meta.Parse(payload, nil)
+		close(conn.metaGotCh)
+	})
 }
 
 func (conn *Connection) sendState(fullName string, data interface{}) {
@@ -597,4 +637,24 @@ func (conn *Connection) removeRespWaiter(uuid string) *RespWaiter {
 	defer conn.waitersLock.Unlock()
 	waiter := conn.respWaiters[uuid]
 	return waiter
+}
+
+func (conn *Connection) notifyRespWaiterOnClose(reason string) {
+	conn.waitersLock.Lock()
+	defer conn.waitersLock.Unlock()
+
+	// 唤醒所有等待
+	for _, waiter := range conn.respWaiters {
+		waiter.wake(message.RawResp{}, fmt.Errorf("connection closed for: %s", reason))
+	}
+
+	// 清空等待对象
+	conn.respWaiters = make(map[string]*RespWaiter)
+}
+
+func (conn *Connection) notifyMetaWaiterOnClose(reason string) {
+	conn.onMetaOnce.Do(func() {
+		conn.peerMetaErr = fmt.Errorf("connection closed for: %s", reason)
+		close(conn.metaGotCh)
+	})
 }
