@@ -10,6 +10,7 @@ import (
 	"goModel/rawConn"
 	"strings"
 	"sync"
+	"time"
 )
 
 var (
@@ -225,6 +226,23 @@ func (conn *Connection) CallAsync(fullName string, args message.Args) (*RespWait
 	}
 
 	return waiter, nil
+}
+
+func (conn *Connection) CallSync(fullName string, args message.Args) (message.RawResp, error) {
+	waiter, err := conn.CallAsync(fullName, args)
+	if err != nil {
+		return message.RawResp{}, err
+	}
+
+	return waiter.Wait()
+}
+
+func (conn *Connection) CallSyncFor(fullName string, args message.Args, timeout time.Duration) (message.RawResp, error) {
+	waiter, err := conn.CallAsync(fullName, args)
+	if err != nil {
+		return message.RawResp{}, err
+	}
+	return waiter.WaitFor(timeout)
 }
 
 func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
