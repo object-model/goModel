@@ -597,6 +597,179 @@ func (s *ModelTestSuite) TestDealSubEventMsg_Error() {
 	}
 }
 
+// TestDealStateMsg 测试收到正常的状态报文
+func (s *ModelTestSuite) TestDealStateMsg() {
+	mockOnClose := new(mockCloseHandler)
+	mockOnState := new(mockStateHandler)
+	mockedConn := new(mockConn)
+
+	// 测试报文数据
+	msg := message.Must(message.EncodeStateMsg("model/state", map[string]interface{}{
+		"a": 123,
+		"b": []string{
+			"Go", "C++", "Python",
+		},
+	}))
+
+	// 状态回调期望的数据
+	wanted := []byte(`{"a":123,"b":["Go","C++","Python"]}`)
+
+	conn := newConn(s.server, mockedConn, WithClosedHandler(mockOnClose),
+		WithStateHandler(mockOnState))
+
+	mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+	mockOnState.On("OnState", "model", "state", wanted).Once()
+
+	mockedConn.On("ReadMsg").Return(msg, nil).Once()
+	mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+	mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+	s.server.dealConn(conn)
+
+	assert.Len(s.T(), s.server.allConn, 0, "管理的连接必须为空")
+
+	mockedConn.AssertExpectations(s.T())
+	mockOnState.AssertExpectations(s.T())
+	mockOnClose.AssertExpectations(s.T())
+}
+
+// TestDealInvalidStateMsg 测试收到无效的状态报文
+func (s *ModelTestSuite) TestDealInvalidStateMsg() {
+	type TestCase struct {
+		msg  []byte // 测试报文数据
+		desc string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"state","payload":[]}`),
+			desc: "无法解析成状态报文1",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"name":123,"data":"hello world"}}`),
+			desc: "无法解析成状态报文2",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"name":"invalid format","data":"hello world"}}`),
+			desc: "状态名称无效格式1",
+		},
+	}
+
+	for _, test := range testCases {
+		mockOnClose := new(mockCloseHandler)
+		mockOnState := new(mockStateHandler)
+		mockedConn := new(mockConn)
+
+		conn := newConn(s.server, mockedConn, WithClosedHandler(mockOnClose),
+			WithStateHandler(mockOnState))
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+
+		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		s.server.dealConn(conn)
+
+		assert.Len(s.T(), s.server.allConn, 0, "管理的连接必须为空")
+
+		mockedConn.AssertExpectations(s.T())
+		mockOnState.AssertExpectations(s.T())
+		mockOnClose.AssertExpectations(s.T())
+	}
+
+}
+
+// TestDealEventMsg 测试收到正常的事件报文
+func (s *ModelTestSuite) TestDealEventMsg() {
+	mockOnClose := new(mockCloseHandler)
+	mockOnEvent := new(mockEventHandler)
+	mockedConn := new(mockConn)
+
+	// 测试报文数据
+	msg := message.Must(message.EncodeEventMsg("model/event", message.Args{
+		"a": 123,
+		"b": []string{
+			"Go", "C++", "Python",
+		},
+	}))
+
+	// 事件回调期望的参数
+	wanted := message.RawArgs{
+		"a": []byte(`123`),
+		"b": []byte(`["Go","C++","Python"]`),
+	}
+
+	conn := newConn(s.server, mockedConn, WithClosedHandler(mockOnClose),
+		WithEventHandler(mockOnEvent))
+
+	mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+	mockOnEvent.On("OnEvent", "model", "event", wanted).Once()
+
+	mockedConn.On("ReadMsg").Return(msg, nil).Once()
+	mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+	mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+	s.server.dealConn(conn)
+
+	assert.Len(s.T(), s.server.allConn, 0, "管理的连接必须为空")
+
+	mockedConn.AssertExpectations(s.T())
+	mockOnEvent.AssertExpectations(s.T())
+	mockOnClose.AssertExpectations(s.T())
+}
+
+// TestDealInvalidStateMsg 测试收到无效的状态报文
+func (s *ModelTestSuite) TestDealInvalidEventMsg() {
+	type TestCase struct {
+		msg  []byte // 测试报文数据
+		desc string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"event","payload":[]}`),
+			desc: "无法解析成状态报文1",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":123,"args":"hello world"}}`),
+			desc: "无法解析成状态报文2",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":"invalid format","args":{"a":1, "b":true}}}`),
+			desc: "状态名称无效格式1",
+		},
+	}
+
+	for _, test := range testCases {
+		mockOnClose := new(mockCloseHandler)
+		mockOnEvent := new(mockEventHandler)
+		mockedConn := new(mockConn)
+
+		conn := newConn(s.server, mockedConn, WithClosedHandler(mockOnClose),
+			WithEventHandler(mockOnEvent))
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+
+		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		s.server.dealConn(conn)
+
+		assert.Len(s.T(), s.server.allConn, 0, "管理的连接必须为空")
+
+		mockedConn.AssertExpectations(s.T())
+		mockOnEvent.AssertExpectations(s.T())
+		mockOnClose.AssertExpectations(s.T())
+	}
+
+}
+
 // TestDealQueryMetaMsg 测试元信息查询报文处理逻辑
 func (s *ModelTestSuite) TestDealQueryMetaMsg() {
 	mockOnClose := new(mockCloseHandler)
