@@ -512,7 +512,7 @@ func (conn *Connection) sendState(fullName string, data interface{}) {
 func (conn *Connection) sendEvent(fullName string, args message.Args) {
 	conn.eventsLock.RLock()
 	defer conn.eventsLock.RUnlock()
-	if _, seen := conn.pubStates[fullName]; seen {
+	if _, seen := conn.pubEvents[fullName]; seen {
 		if msg, err := message.EncodeEventMsg(fullName, args); err == nil {
 			_ = conn.sendMsg(msg)
 		}

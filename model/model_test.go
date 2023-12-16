@@ -3,13 +3,40 @@ package model
 import (
 	"errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"goModel/message"
 	"goModel/meta"
-	"goModel/rawConn/mockConn"
+	"net"
 	"reflect"
 	"testing"
 )
+
+// 模拟连接
+type MockConn struct {
+	mock.Mock
+}
+
+func (m *MockConn) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockConn) RemoteAddr() net.Addr {
+	args := m.Called()
+	return args.Get(0).(net.Addr)
+}
+
+func (m *MockConn) ReadMsg() ([]byte, error) {
+	args := m.Called()
+	return args.Get(0).([]byte), args.Error(1)
+}
+
+func (m *MockConn) WriteMsg(msg []byte) error {
+	args := m.Called(msg)
+	return args.Error(0)
+}
 
 type errorInfo struct {
 	Code uint   `json:"code"`
@@ -20,6 +47,12 @@ type tpqsInfo struct {
 	HpSwitch bool        `json:"hpSwitch"`
 	QsAngle  float64     `json:"qsAngle"`
 	Errors   []errorInfo `json:"errors"`
+}
+
+type motor struct {
+	Rov  int `json:"rov"`
+	Cur  int `json:"cur"`
+	Temp int `json:"temp"`
 }
 
 func TestNew(t *testing.T) {
@@ -61,17 +94,29 @@ func TestLoadFromFile(t *testing.T) {
 		"注册的调用请求回调函数")
 }
 
-func TestModel_PushState(t *testing.T) {
+type ModelTestSuite struct {
+	suite.Suite
+	server    *Model
+	mockConn1 *MockConn
+	mockConn2 *MockConn
+}
+
+func (s *ModelTestSuite) SetupSuite() {
 	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
 		"group": "A",
 		"id":    "#1",
 	})
 
-	require.Nil(t, err)
+	require.Nil(s.T(), err)
+	s.server = server
+}
 
-	mockConn1 := new(mockConn.MockConn)
-	mockConn2 := new(mockConn.MockConn)
+func (s *ModelTestSuite) SetupTest() {
+	s.mockConn1 = new(MockConn)
+	s.mockConn2 = new(MockConn)
+}
 
+func (s *ModelTestSuite) TestPushState() {
 	state1 := tpqsInfo{
 		QsState:  "erecting",
 		HpSwitch: false,
@@ -82,41 +127,104 @@ func TestModel_PushState(t *testing.T) {
 	msg1 := message.Must(message.EncodeStateMsg("A/car/#1/tpqs/tpqsInfo", state1))
 	msg2 := message.Must(message.EncodeStateMsg("A/car/#1/tpqs/gear", 1))
 
-	mockConn1.On("WriteMsg", msg1).Return(nil)
-	mockConn1.On("WriteMsg", msg2).Return(nil)
-	mockConn2.On("WriteMsg", msg2).Return(nil)
+	s.mockConn1.On("WriteMsg", msg1).Return(nil)
+	s.mockConn1.On("WriteMsg", msg2).Return(nil)
+	s.mockConn2.On("WriteMsg", msg2).Return(nil)
 
-	conn1 := newConn(server, mockConn1)
-	conn2 := newConn(server, mockConn2)
+	conn1 := newConn(s.server, s.mockConn1)
+	conn2 := newConn(s.server, s.mockConn2)
 
 	conn1.pubStates["A/car/#1/tpqs/tpqsInfo"] = struct{}{}
 	conn1.pubStates["A/car/#1/tpqs/gear"] = struct{}{}
 	conn2.pubStates["A/car/#1/tpqs/gear"] = struct{}{}
 
-	server.allConn[conn1] = struct{}{}
-	server.allConn[conn2] = struct{}{}
+	s.server.allConn[conn1] = struct{}{}
+	s.server.allConn[conn2] = struct{}{}
 
-	err = server.PushState("tpqsInfo", state1, false)
-	require.Nil(t, err)
+	err := s.server.PushState("tpqsInfo", state1, false)
+	require.Nil(s.T(), err)
 
-	err = server.PushState("gear", uint(1), false)
-	require.Nil(t, err)
+	err = s.server.PushState("gear", uint(1), false)
+	require.Nil(s.T(), err)
 
-	mockConn1.AssertExpectations(t)
-	mockConn2.AssertExpectations(t)
+	s.mockConn1.AssertExpectations(s.T())
+	s.mockConn2.AssertExpectations(s.T())
 }
 
-func TestModel_PushState_Error(t *testing.T) {
-	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
-		"group": "A",
-		"id":    "#1",
-	})
+func (s *ModelTestSuite) TestPushState_Error() {
+	err := s.server.PushState("unknown", 123, true)
+	assert.EqualValues(s.T(), errors.New("NO state \"unknown\""), err, "不存在的状态")
 
-	require.Nil(t, err)
+	err = s.server.PushState("gear", "123", true)
+	assert.EqualValues(s.T(), errors.New("type unmatched"), err, "不符合元信息的状态")
+}
 
-	err = server.PushState("unknown", 123, true)
-	assert.EqualValues(t, errors.New("NO state \"unknown\""), err, "不存在的状态")
+func (s *ModelTestSuite) TestPushEvent() {
+	action := message.Args{
+		"motors": [4]motor{
+			{
+				Rov:  1200,
+				Cur:  28888,
+				Temp: 41,
+			},
 
-	err = server.PushState("gear", "123", true)
-	assert.EqualValues(t, errors.New("type unmatched"), err, "不符合元信息的状态")
+			{
+				Rov:  1300,
+				Cur:  29888,
+				Temp: 42,
+			},
+
+			{
+				Rov:  1400,
+				Cur:  29988,
+				Temp: 43,
+			},
+
+			{
+				Rov:  1100,
+				Cur:  27888,
+				Temp: 40,
+			},
+		},
+
+		"qsAngle": 45,
+	}
+
+	msg1 := message.Must(message.EncodeEventMsg("A/car/#1/tpqs/qsMotorOverCur", message.Args{}))
+	msg2 := message.Must(message.EncodeEventMsg("A/car/#1/tpqs/qsAction", action))
+
+	s.mockConn1.On("WriteMsg", msg1).Return(nil)
+	s.mockConn1.On("WriteMsg", msg2).Return(nil)
+	s.mockConn2.On("WriteMsg", msg2).Return(nil)
+
+	conn1 := newConn(s.server, s.mockConn1)
+	conn2 := newConn(s.server, s.mockConn2)
+
+	conn1.pubEvents["A/car/#1/tpqs/qsMotorOverCur"] = struct{}{}
+	conn1.pubEvents["A/car/#1/tpqs/qsAction"] = struct{}{}
+	conn2.pubEvents["A/car/#1/tpqs/qsAction"] = struct{}{}
+
+	s.server.allConn[conn1] = struct{}{}
+	s.server.allConn[conn2] = struct{}{}
+
+	err := s.server.PushEvent("qsMotorOverCur", message.Args{}, true)
+	require.Nil(s.T(), err)
+
+	err = s.server.PushEvent("qsAction", action, true)
+	require.Nil(s.T(), err)
+
+	s.mockConn1.AssertExpectations(s.T())
+	s.mockConn2.AssertExpectations(s.T())
+}
+
+func (s *ModelTestSuite) TestPushEvent_Error() {
+	err := s.server.PushEvent("unknown", message.Args{}, true)
+	assert.EqualValues(s.T(), errors.New("NO event \"unknown\""), err, "不存在的事件")
+
+	err = s.server.PushEvent("qsAction", message.Args{"qsAngle": 90}, true)
+	assert.EqualValues(s.T(), errors.New("arg \"motors\": missing"), err, "事件缺失参数")
+}
+
+func TestModel(t *testing.T) {
+	suite.Run(t, new(ModelTestSuite))
 }
