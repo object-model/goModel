@@ -25,25 +25,45 @@ type ServiceTCPAddr struct {
 	Port int    // 模型服务端口号
 }
 
+// CallRequestHandler 调用请求处理接口
+type CallRequestHandler interface {
+	OnCallReq(name string, args message.RawArgs) message.Resp
+}
+
 // CallRequestFunc 为调用请求回调函数, 参数name为调用的方法名, 参数args为调用参数
 // 函数返回值为调用请求的返回值.
 type CallRequestFunc func(name string, args message.RawArgs) message.Resp
+
+func (c CallRequestFunc) OnCallReq(name string, args message.RawArgs) message.Resp {
+	return c(name, args)
+}
 
 type Model struct {
 	meta           *meta.Meta               // 元信息
 	connLock       sync.RWMutex             // 保护 allConn
 	allConn        map[*Connection]struct{} // 所有连接
 	verifyResp     bool                     // 是否校验 callReqHandler 返回的响应返回值
-	callReqHandler CallRequestFunc          // 调用请求处理函数
+	callReqHandler CallRequestHandler       // 调用请求处理函数
 }
 
 // ModelOption 为物模型创建选项
 type ModelOption func(*Model)
 
-// WithCallReq 配置物模型的调用请求回调函数
-func WithCallReq(onCall CallRequestFunc) ModelOption {
+// WithCallReqHandler 配置物模型的调用请求回调处理
+func WithCallReqHandler(onCall CallRequestHandler) ModelOption {
 	return func(model *Model) {
-		model.callReqHandler = onCall
+		if onCall != nil {
+			model.callReqHandler = onCall
+		}
+	}
+}
+
+// WithCallReqFunc 配置物模型的调用请求回调函数对象
+func WithCallReqFunc(onCall CallRequestFunc) ModelOption {
+	return func(model *Model) {
+		if onCall != nil {
+			model.callReqHandler = onCall
+		}
 	}
 }
 

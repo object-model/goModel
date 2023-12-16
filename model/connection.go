@@ -17,19 +17,46 @@ var (
 	json = jsoniter.ConfigCompatibleWithStandardLibrary
 )
 
+// StateHandler 状态报文处理接口
+type StateHandler interface {
+	OnState(modelName string, stateName string, data []byte)
+}
+
+// EventHandler 事件报文处理接口
+type EventHandler interface {
+	OnEvent(modelName string, eventName string, args message.RawArgs)
+}
+
+// ClosedHandler 连接关闭处理接口
+type ClosedHandler interface {
+	OnClosed(reason string)
+}
+
 // StateFunc 为状态回调函数, 参数modelName为状态报文对应的物模型名称,
 // stateName 为状态报文对应的状态名, 参数data为状态数据.
 type StateFunc func(modelName string, stateName string, data []byte)
 
+func (s StateFunc) OnState(modelName string, stateName string, data []byte) {
+	s(modelName, stateName, data)
+}
+
 // EventFunc 为事件回调函数, 参数modelName为事件报文对应的物模型名称,
 // 参数eventName 为事件报文对应的状态名, 参数args为事件所携带参数.
 type EventFunc func(modelName string, eventName string, args message.RawArgs)
+
+func (e EventFunc) OnEvent(modelName string, eventName string, args message.RawArgs) {
+	e(modelName, eventName, args)
+}
 
 // RespFunc 为响应回调函数, 参数resp为响应原始数据, 参数err为响应错误信息
 type RespFunc func(resp message.RawResp, err error)
 
 // ClosedFunc 为连接关闭回调函数, 参数modelName为关闭原因
 type ClosedFunc func(reason string)
+
+func (c ClosedFunc) OnClosed(reason string) {
+	c(reason)
+}
 
 // Connection 为物模型连接,可以通过连接订阅状态和事件、注册状态和事件回调、远程调用方法、查询对端元信息.
 type Connection struct {
@@ -47,10 +74,10 @@ type Connection struct {
 	eventsCloseOnce sync.Once                 // 确保 eventsChan 只关闭一次
 	eventsChan      chan message.EventPayload // 事件管道
 	eventsQuited    chan struct{}             // dealEvent 完全退出信号
-	stateHandler    StateFunc                 // 状态处理回调
-	eventHandler    EventFunc                 // 事件处理回调
+	stateHandler    StateHandler              // 状态处理回调
+	eventHandler    EventHandler              // 事件处理回调
 	closedOnce      sync.Once                 // 确保 closedHandler 只调用一次
-	closedHandler   ClosedFunc                // 连接关闭处理函数
+	closedHandler   ClosedHandler             // 连接关闭处理函数
 	onMetaOnce      sync.Once                 // 确保只响应元信息报文一次
 	metaGotCh       chan struct{}             // 对端元信息已获取信号
 	peerMeta        *meta.Meta                // 对端的元信息
@@ -62,6 +89,15 @@ type Connection struct {
 // ConnOption 为创建连接选项
 type ConnOption func(*Connection)
 
+// WithStateHandler 配置连接的状态报文回调处理对象
+func WithStateHandler(onState StateHandler) ConnOption {
+	return func(connection *Connection) {
+		if onState != nil {
+			connection.stateHandler = onState
+		}
+	}
+}
+
 // WithStateFunc 配置连接的状态报文回调函数
 func WithStateFunc(onState StateFunc) ConnOption {
 	return func(connection *Connection) {
@@ -71,11 +107,29 @@ func WithStateFunc(onState StateFunc) ConnOption {
 	}
 }
 
+// WithEventFunc 配置连接的事件报文回调对象
+func WithEventHandler(onEvent EventHandler) ConnOption {
+	return func(connection *Connection) {
+		if onEvent != nil {
+			connection.eventHandler = onEvent
+		}
+	}
+}
+
 // WithEventFunc 配置连接的事件报文回调函数
 func WithEventFunc(onEvent EventFunc) ConnOption {
 	return func(connection *Connection) {
 		if onEvent != nil {
 			connection.eventHandler = onEvent
+		}
+	}
+}
+
+// WithClosedHandler 配置连接的关闭回调对象
+func WithClosedHandler(onClose ClosedHandler) ConnOption {
+	return func(connection *Connection) {
+		if onClose != nil {
+			connection.closedHandler = onClose
 		}
 	}
 }
@@ -117,9 +171,9 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 		eventsChan:    make(chan message.EventPayload, 256),
 		statesQuited:  make(chan struct{}),
 		eventsQuited:  make(chan struct{}),
-		stateHandler:  func(string, string, []byte) {},
-		eventHandler:  func(string, string, message.RawArgs) {},
-		closedHandler: func(string) {},
+		stateHandler:  StateFunc(func(string, string, []byte) {}),
+		eventHandler:  EventFunc(func(string, string, message.RawArgs) {}),
+		closedHandler: ClosedFunc(func(string) {}),
 		metaGotCh:     make(chan struct{}),
 		peerMeta:      meta.NewEmptyMeta(),
 		peerMetaErr:   fmt.Errorf("have NOT got peer meta yet"),
@@ -321,7 +375,7 @@ func (conn *Connection) dealReceive() {
 		msg := message.RawMessage{}
 		err = json.Unmarshal(data, &msg)
 		if err != nil {
-			reason = err.Error()
+			reason = fmt.Sprintf("decode json: %s", err.Error())
 			break
 		}
 
@@ -341,7 +395,7 @@ func (conn *Connection) close(reason string) error {
 
 	// 调用关闭回调
 	conn.closedOnce.Do(func() {
-		conn.closedHandler(reason)
+		conn.closedHandler.OnClosed(reason)
 	})
 	return err
 }
@@ -536,7 +590,7 @@ func (conn *Connection) dealState() {
 		modelName := state.Name[:i]
 		stateName := state.Name[i+1:]
 
-		conn.stateHandler(modelName, stateName, state.Data)
+		conn.stateHandler.OnState(modelName, stateName, state.Data)
 	}
 }
 
@@ -550,7 +604,7 @@ func (conn *Connection) dealEvent() {
 		modelName := event.Name[:i]
 		eventName := event.Name[i+1:]
 
-		conn.eventHandler(modelName, eventName, event.Args)
+		conn.eventHandler.OnEvent(modelName, eventName, event.Args)
 	}
 }
 
@@ -601,7 +655,7 @@ func (conn *Connection) dealCallReq(call message.CallPayload) {
 	}
 
 	// 6.调用回调
-	resp := conn.m.callReqHandler(methodName, args)
+	resp := conn.m.callReqHandler.OnCallReq(methodName, args)
 
 	// 7.校验响应
 	errStr := ""
