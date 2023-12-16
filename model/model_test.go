@@ -11,7 +11,9 @@ import (
 	"goModel/meta"
 	"io"
 	"net"
+	"reflect"
 	"testing"
+	"time"
 )
 
 // 模拟连接
@@ -89,6 +91,33 @@ type motor struct {
 	Temp int `json:"temp"`
 }
 
+// TestWithVerifyResp 测试开启物模型的响应校验选项
+func TestWithVerifyResp(t *testing.T) {
+	m := &Model{}
+	WithVerifyResp()(m)
+	assert.True(t, m.verifyResp, "开启校验返回值")
+}
+
+// TestWithCallReqHandler 测试配置物模型的调用请求回调处理对象
+func TestWithCallReqHandler(t *testing.T) {
+	m := &Model{}
+	mockCallReq := new(mockCallReqHandler)
+	WithCallReqHandler(mockCallReq)(m)
+	assert.Equal(t, mockCallReq, m.callReqHandler, "配置调用请求回调处理对象")
+}
+
+func TestWithCallReqFunc(t *testing.T) {
+	m := &Model{}
+	onCall := func(name string, args message.RawArgs) message.Resp {
+		return message.Resp{}
+	}
+	WithCallReqFunc(onCall)(m)
+	assert.Equal(t, reflect.ValueOf(onCall).Pointer(),
+		reflect.ValueOf(m.callReqHandler).Pointer(),
+		"配置调用请求回调处理函数")
+}
+
+// TestLoadFromFileFailed 测试从文件加载模型失败情况
 func TestLoadFromFileFailed(t *testing.T) {
 	_, err := LoadFromFile("unknown.json", meta.TemplateParam{
 		"group": " A ",
@@ -99,12 +128,12 @@ func TestLoadFromFileFailed(t *testing.T) {
 }
 
 // ModelTestSuite
-type ModelTestSuite struct {
+type StateEventSuite struct {
 	suite.Suite
 	server *Model // 服务端物模型
 }
 
-func (s *ModelTestSuite) SetupSuite() {
+func (s *StateEventSuite) SetupSuite() {
 	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
 		"group": "A",
 		"id":    "#1",
@@ -114,12 +143,12 @@ func (s *ModelTestSuite) SetupSuite() {
 	s.server = server
 }
 
-func (s *ModelTestSuite) SetupTest() {
+func (s *StateEventSuite) SetupTest() {
 	s.server.allConn = make(map[*Connection]struct{})
 }
 
 // TestPushState 测试推送状态报文成功的情况
-func (s *ModelTestSuite) TestPushState() {
+func (s *StateEventSuite) TestPushState() {
 
 	mockConn1 := new(mockConn)
 	mockConn2 := new(mockConn)
@@ -159,7 +188,7 @@ func (s *ModelTestSuite) TestPushState() {
 }
 
 // TestPushState_Error 测试推送状态报文出错的情况
-func (s *ModelTestSuite) TestPushState_Error() {
+func (s *StateEventSuite) TestPushState_Error() {
 	err := s.server.PushState("unknown", 123, true)
 	assert.EqualValues(s.T(), errors.New("NO state \"unknown\""), err, "不存在的状态")
 
@@ -168,7 +197,7 @@ func (s *ModelTestSuite) TestPushState_Error() {
 }
 
 // TestPushEvent 测试推送事件报文成功的情况
-func (s *ModelTestSuite) TestPushEvent() {
+func (s *StateEventSuite) TestPushEvent() {
 	action := message.Args{
 		"motors": [4]motor{
 			{
@@ -229,7 +258,7 @@ func (s *ModelTestSuite) TestPushEvent() {
 	mockConn2.AssertExpectations(s.T())
 }
 
-func (s *ModelTestSuite) TestPushEvent_Error() {
+func (s *StateEventSuite) TestPushEvent_Error() {
 	err := s.server.PushEvent("unknown", message.Args{}, true)
 	assert.EqualValues(s.T(), errors.New("NO event \"unknown\""), err, "不存在的事件")
 
@@ -238,7 +267,7 @@ func (s *ModelTestSuite) TestPushEvent_Error() {
 }
 
 // TestDealInvalidJsonMsg 测试收到无效的JSON数据的情况
-func (s *ModelTestSuite) TestDealInvalidJsonMsg() {
+func (s *StateEventSuite) TestDealInvalidJsonMsg() {
 	mockedConn := new(mockConn)
 
 	conn1 := newConn(s.server, mockedConn, WithClosedFunc(func(reason string) {
@@ -257,7 +286,7 @@ func (s *ModelTestSuite) TestDealInvalidJsonMsg() {
 }
 
 // TestDealSubStateMsg 测试状态订阅报文的处理逻辑
-func (s *ModelTestSuite) TestDealSubStateMsg() {
+func (s *StateEventSuite) TestDealSubStateMsg() {
 
 	type TestCase struct {
 		initial map[string]struct{} // 初始的状态发布表
@@ -358,7 +387,7 @@ func (s *ModelTestSuite) TestDealSubStateMsg() {
 }
 
 // TestDealSubStateMsg_Error 测试解析状态订阅报文错误的情况
-func (s *ModelTestSuite) TestDealSubStateMsg_Error() {
+func (s *StateEventSuite) TestDealSubStateMsg_Error() {
 
 	type TestCase struct {
 		initial map[string]struct{} // 初始的状态发布表
@@ -432,7 +461,7 @@ func (s *ModelTestSuite) TestDealSubStateMsg_Error() {
 }
 
 // TestDealSubEventMsg 测试事件订阅报文的处理逻辑
-func (s *ModelTestSuite) TestDealSubEventMsg() {
+func (s *StateEventSuite) TestDealSubEventMsg() {
 
 	type TestCase struct {
 		initial map[string]struct{} // 初始的事件发布表
@@ -526,7 +555,7 @@ func (s *ModelTestSuite) TestDealSubEventMsg() {
 }
 
 // TestDealSubEventMsg_Error 测试解析事件订阅报文错误的情况
-func (s *ModelTestSuite) TestDealSubEventMsg_Error() {
+func (s *StateEventSuite) TestDealSubEventMsg_Error() {
 
 	type TestCase struct {
 		initial map[string]struct{} // 初始的事件发布表
@@ -598,7 +627,7 @@ func (s *ModelTestSuite) TestDealSubEventMsg_Error() {
 }
 
 // TestDealStateMsg 测试收到正常的状态报文
-func (s *ModelTestSuite) TestDealStateMsg() {
+func (s *StateEventSuite) TestDealStateMsg() {
 	mockOnClose := new(mockCloseHandler)
 	mockOnState := new(mockStateHandler)
 	mockedConn := new(mockConn)
@@ -634,7 +663,7 @@ func (s *ModelTestSuite) TestDealStateMsg() {
 }
 
 // TestDealInvalidStateMsg 测试收到无效的状态报文
-func (s *ModelTestSuite) TestDealInvalidStateMsg() {
+func (s *StateEventSuite) TestDealInvalidStateMsg() {
 	type TestCase struct {
 		msg  []byte // 测试报文数据
 		desc string // 用例描述
@@ -683,7 +712,7 @@ func (s *ModelTestSuite) TestDealInvalidStateMsg() {
 }
 
 // TestDealEventMsg 测试收到正常的事件报文
-func (s *ModelTestSuite) TestDealEventMsg() {
+func (s *StateEventSuite) TestDealEventMsg() {
 	mockOnClose := new(mockCloseHandler)
 	mockOnEvent := new(mockEventHandler)
 	mockedConn := new(mockConn)
@@ -722,7 +751,7 @@ func (s *ModelTestSuite) TestDealEventMsg() {
 }
 
 // TestDealInvalidStateMsg 测试收到无效的状态报文
-func (s *ModelTestSuite) TestDealInvalidEventMsg() {
+func (s *StateEventSuite) TestDealInvalidEventMsg() {
 	type TestCase struct {
 		msg  []byte // 测试报文数据
 		desc string // 用例描述
@@ -771,7 +800,7 @@ func (s *ModelTestSuite) TestDealInvalidEventMsg() {
 }
 
 // TestDealQueryMetaMsg 测试元信息查询报文处理逻辑
-func (s *ModelTestSuite) TestDealQueryMetaMsg() {
+func (s *StateEventSuite) TestDealQueryMetaMsg() {
 	mockOnClose := new(mockCloseHandler)
 	mockedConn := new(mockConn)
 
@@ -793,7 +822,195 @@ func (s *ModelTestSuite) TestDealQueryMetaMsg() {
 	mockOnClose.AssertExpectations(s.T())
 }
 
-func (s *ModelTestSuite) TestDialTcp() {
+// TestAboutStateEvent 测试推送状态、事件、状态和事件报文、状态和事件订阅报文的处理逻辑
+func TestAboutStateEvent(t *testing.T) {
+	suite.Run(t, new(StateEventSuite))
+}
+
+// TestDealCallMsg 测试有效调用请求报文
+func TestDealCallMsg(t *testing.T) {
+
+	type TestCase struct {
+		msg        []byte          // 测试报文数据
+		resp       message.Resp    // 调用请求返回值
+		hasOnCall  bool            // 是否注册了调用请求回调
+		verifyResp bool            // 是否对象响应校验
+		wantMsg    []byte          // 期望的响应报文数据
+		wantArgs   message.RawArgs // 调用请求回调期望的调用参数
+		desc       string          // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"invalid format","uuid":"123456","args":{}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"fullName is invalid format","response":{}}}`),
+			desc:    "调用方法名无效",
+		},
+
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"unknown/QS","uuid":"123456","args":{}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"modelName \"unknown\": unmatched","response":{}}}`),
+			desc:    "调用的模型名称不匹配",
+		},
+
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/unknown","uuid":"123456","args":{}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"NO method \"unknown\"","response":{}}}`),
+			desc:    "调用的方法不存在",
+		},
+
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"arg \"angle\": missing","response":{}}}`),
+			desc:    "调用的参数不符合元信息---参数缺失",
+		},
+
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"arg \"angle\": missing","response":{}}}`),
+			desc:    "调用的参数不符合元信息---参数缺失",
+		},
+
+		{
+			msg:     []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"fast"}}}`),
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"NO callback","response":{}}}`),
+			desc:    "没有注册调用请求回调",
+		},
+
+		{
+			msg:       []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"fast"}}}`),
+			hasOnCall: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"fast"`),
+			},
+			resp: message.Resp{
+				"res": true,
+				"msg": "执行成功",
+			},
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"","response":{"msg":"执行成功","res":true}}}`),
+			desc:    "没有开启响应校验直接采信回调输出",
+		},
+
+		{
+			msg:        []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"middle"}}}`),
+			hasOnCall:  true,
+			verifyResp: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res": true,
+				"msg": "执行成功",
+			},
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"response \"time\": missing","response":{"msg":"执行成功","res":true}}}`),
+			desc:    "开启响应校验---返回值不符合元信息---返回值缺失",
+		},
+
+		{
+			msg:        []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"middle"}}}`),
+			hasOnCall:  true,
+			verifyResp: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": 100,
+				"code": 0,
+			},
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"response \"time\": type unmatched","response":{"code":0,"msg":"执行成功","res":true,"time":100}}}`),
+			desc:    "开启响应校验---返回值不符合元信息---返回值类型不匹配",
+		},
+
+		{
+			msg:        []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"middle"}}}`),
+			hasOnCall:  true,
+			verifyResp: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res":  false,
+				"msg":  "未知执行结果",
+				"time": uint(100),
+				"code": 5,
+			},
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"response \"code\": 5 NOT in option","response":{"code":5,"msg":"未知执行结果","res":false,"time":100}}}`),
+			desc:    "开启响应校验---返回值不符合元信息---返回值不再可选项中",
+		},
+
+		{
+			msg:        []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"middle"}}}`),
+			hasOnCall:  true,
+			verifyResp: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res":  false,
+				"msg":  "驱动器未上电",
+				"time": uint(100),
+				"code": 2,
+			},
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"","response":{"code":2,"msg":"驱动器未上电","res":false,"time":100}}}`),
+			desc:    "开启响应校验---无错误",
+		},
+	}
+
+	for _, test := range testCases {
+		fmt.Println(test.desc)
+
+		mockOnCall := new(mockCallReqHandler)
+		mockOnClose := new(mockCloseHandler)
+		mockedConn := new(mockConn)
+
+		var opts []ModelOption
+		if test.hasOnCall {
+			opts = append(opts, WithCallReqHandler(mockOnCall))
+		}
+		if test.verifyResp {
+			opts = append(opts, WithVerifyResp())
+		}
+
+		server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+			"group": "A",
+			"id":    "#1",
+		}, opts...)
+
+		require.Nil(t, err)
+
+		conn := newConn(server, mockedConn, WithClosedHandler(mockOnClose))
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+
+		if test.wantArgs != nil {
+			mockOnCall.On("OnCallReq", "QS", test.wantArgs).Return(test.resp).Once()
+		}
+
+		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		mockedConn.On("WriteMsg", test.wantMsg).Return(nil).Once()
+
+		// NOTE: 目的是确保在需要调用回调是, 等回调返回再沿着
+		// NOTE: 否则由于回调还没来的及触发, 而导致提前验证不通过
+		mockedConn.On("ReadMsg").After(time.Second/10).Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		server.dealConn(conn)
+
+		mockedConn.AssertExpectations(t)
+		mockOnCall.AssertExpectations(t)
+		mockOnClose.AssertExpectations(t)
+	}
+
+}
+
+func (s *StateEventSuite) TestDialTcp() {
 	go func() {
 		_ = s.server.ListenServeTCP(":61234")
 	}()
@@ -817,8 +1034,4 @@ func (s *ModelTestSuite) TestDialTcp() {
 	assert.Equal(s.T(), 1024, cap(conn.statesChan))
 	assert.Equal(s.T(), 512, cap(conn.eventsChan))
 
-}
-
-func TestModel(t *testing.T) {
-	suite.Run(t, new(ModelTestSuite))
 }
