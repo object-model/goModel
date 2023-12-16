@@ -155,73 +155,49 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 
 // SubState 通过连接conn发送状态订阅报文,订阅状态列表states中的所有状态,并返回错误信息.
 func (conn *Connection) SubState(states []string) error {
-	msg, err := message.EncodeSubStateMsg(message.SetSub, states)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubStateMsg(message.SetSub, states))
 	return conn.sendMsg(msg)
 }
 
 // AddSubState 通过连接conn发送添加状态订阅报文,新增对状态列表states中的所有状态的订阅,并返回错误信息.
 func (conn *Connection) AddSubState(states []string) error {
-	msg, err := message.EncodeSubStateMsg(message.AddSub, states)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubStateMsg(message.AddSub, states))
 	return conn.sendMsg(msg)
 }
 
 // CancelSubState 通过连接conn发送取消状态订阅报文,取消对状态列表states中所有状态的订阅,并返回错误信息.
 func (conn *Connection) CancelSubState(states []string) error {
-	msg, err := message.EncodeSubStateMsg(message.RemoveSub, states)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubStateMsg(message.RemoveSub, states))
 	return conn.sendMsg(msg)
 }
 
 // CancelAllSubState 通过连接conn发送取消所有状态订阅报文,取消对所有状态的订阅,并返回错误信息.
 func (conn *Connection) CancelAllSubState() error {
-	msg, err := message.EncodeSubStateMsg(message.RemoveSub, nil)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubStateMsg(message.RemoveSub, nil))
 	return conn.sendMsg(msg)
 }
 
 // SubEvent 通过连接conn发送事件订阅报文,订阅事件列表events中所有事件,并返回错误信息.
 func (conn *Connection) SubEvent(events []string) error {
-	msg, err := message.EncodeSubEventMsg(message.SetSub, events)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubEventMsg(message.SetSub, events))
 	return conn.sendMsg(msg)
 }
 
 // AddSubEvent 通过连接conn发送添加事件订阅报文,新增对事件列表events中所有事件的订阅,并返回错误信息.
 func (conn *Connection) AddSubEvent(events []string) error {
-	msg, err := message.EncodeSubEventMsg(message.AddSub, events)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubEventMsg(message.AddSub, events))
 	return conn.sendMsg(msg)
 }
 
 // CancelSubEvent 通过连接conn发送取消事件订阅报文,取消对事件列表events中所有事件的订阅,并返回错误信息.
 func (conn *Connection) CancelSubEvent(events []string) error {
-	msg, err := message.EncodeSubEventMsg(message.RemoveSub, events)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubEventMsg(message.RemoveSub, events))
 	return conn.sendMsg(msg)
 }
 
 // CancelAllSubEvent 通过连接conn发送取消所有事件订阅报文,取消对所有事件的订阅,并返回错误信息.
 func (conn *Connection) CancelAllSubEvent() error {
-	msg, err := message.EncodeSubEventMsg(message.RemoveSub, nil)
-	if err != nil {
-		return err
-	}
+	msg := message.Must(message.EncodeSubEventMsg(message.RemoveSub, nil))
 	return conn.sendMsg(msg)
 }
 
