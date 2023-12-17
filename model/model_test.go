@@ -672,21 +672,43 @@ func (s *StateEventSuite) TestDealInvalidStateMsg() {
 	testCases := []TestCase{
 		{
 			msg:  []byte(`{"type":"state","payload":[]}`),
-			desc: "无法解析成状态报文1",
+			desc: "payload不是对象",
 		},
 
 		{
 			msg:  []byte(`{"type":"state","payload":{"name":123,"data":"hello world"}}`),
-			desc: "无法解析成状态报文2",
+			desc: "name字段不是字符串",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"data":123}}`),
+			desc: "payload缺失name字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"name":"    \f\t","data":123}}`),
+			desc: "name字段去除空格后为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"name":"car/state"}}`),
+			desc: "payload缺失data字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":{"name":"car/state","args":null}}`),
+			desc: "args字段为null",
 		},
 
 		{
 			msg:  []byte(`{"type":"state","payload":{"name":"invalid format","data":"hello world"}}`),
-			desc: "状态名称无效格式1",
+			desc: "状态名称name不包含/",
 		},
 	}
 
 	for _, test := range testCases {
+		fmt.Println(test.desc)
+
 		mockOnClose := new(mockCloseHandler)
 		mockOnState := new(mockStateHandler)
 		mockedConn := new(mockConn)
@@ -760,21 +782,43 @@ func (s *StateEventSuite) TestDealInvalidEventMsg() {
 	testCases := []TestCase{
 		{
 			msg:  []byte(`{"type":"event","payload":[]}`),
-			desc: "无法解析成状态报文1",
+			desc: "payload不是对象",
 		},
 
 		{
 			msg:  []byte(`{"type":"event","payload":{"name":123,"args":"hello world"}}`),
-			desc: "无法解析成状态报文2",
+			desc: "name字段不是字符串",
 		},
 
 		{
 			msg:  []byte(`{"type":"event","payload":{"name":"invalid format","args":{"a":1, "b":true}}}`),
-			desc: "状态名称无效格式1",
+			desc: "状态名称name不包含/",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":"model/event"}}`),
+			desc: "缺失args字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":"","args":{}}}`),
+			desc: "name字段为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":"    ","args":{}}}`),
+			desc: "name字段去除空格后为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":{"name":"123","args":null}}`),
+			desc: "args字段为null",
 		},
 	}
 
 	for _, test := range testCases {
+		fmt.Println(test.desc)
+
 		mockOnClose := new(mockCloseHandler)
 		mockOnEvent := new(mockEventHandler)
 		mockedConn := new(mockConn)
@@ -1007,7 +1051,89 @@ func TestDealCallMsg(t *testing.T) {
 		mockOnCall.AssertExpectations(t)
 		mockOnClose.AssertExpectations(t)
 	}
+}
 
+// TestDealInvalidCallMsg 测试无效调用请求报文
+func TestDealInvalidCallMsg(t *testing.T) {
+	type TestCase struct {
+		msg  []byte // 测试报文数据
+		desc string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"call","payload":[]}`),
+			desc: "payload不是对象",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":123}}`),
+			desc: "调用请求的name字段不是字符串",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"uuid":"123","args":{}}}`),
+			desc: "调用请求缺少name字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"\r\n  \t","uuid":"123","args":{}}}`),
+			desc: "name字段去除空格后为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"cat/qs","args":{}}}`),
+			desc: "调用请求缺少uuid字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"cat/qs","uuid":"","args":{}}}`),
+			desc: "uuid字段为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"cat/qs","uuid":"  \t","args":{}}}`),
+			desc: "uuid字段去除空格后为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"cat/qs","uuid":"123"}}`),
+			desc: "调用请求缺少args字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":{"name":"cat/qs","uuid":"123","args":null}}`),
+			desc: "args字段为null",
+		},
+	}
+
+	for _, test := range testCases {
+		fmt.Println(test.desc)
+
+		mockOnCall := new(mockCallReqHandler)
+		mockOnClose := new(mockCloseHandler)
+		mockedConn := new(mockConn)
+
+		server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+			"group": "A",
+			"id":    "#1",
+		})
+
+		require.Nil(t, err)
+
+		conn := newConn(server, mockedConn, WithClosedHandler(mockOnClose))
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		server.dealConn(conn)
+
+		mockedConn.AssertExpectations(t)
+		mockOnCall.AssertExpectations(t)
+		mockOnClose.AssertExpectations(t)
+	}
 }
 
 func (s *StateEventSuite) TestDialTcp() {
@@ -1033,5 +1159,4 @@ func (s *StateEventSuite) TestDialTcp() {
 
 	assert.Equal(s.T(), 1024, cap(conn.statesChan))
 	assert.Equal(s.T(), 512, cap(conn.eventsChan))
-
 }

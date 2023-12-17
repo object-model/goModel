@@ -501,6 +501,12 @@ func (conn *Connection) onState(payload []byte) {
 	if json.Unmarshal(payload, &state) != nil {
 		return
 	}
+
+	// 字段缺失或者为空
+	if strings.TrimSpace(state.Name) == "" || state.Data == nil {
+		return
+	}
+
 	conn.statesChan <- state
 }
 
@@ -509,6 +515,12 @@ func (conn *Connection) onEvent(payload []byte) {
 	if json.Unmarshal(payload, &event) != nil {
 		return
 	}
+
+	// 字段缺失或者为空
+	if strings.TrimSpace(event.Name) == "" || event.Args == nil {
+		return
+	}
+
 	conn.eventsChan <- event
 }
 
@@ -517,12 +529,24 @@ func (conn *Connection) onCall(payload []byte) {
 	if json.Unmarshal(payload, &call) != nil {
 		return
 	}
+	// 参数缺失或者为空
+	if strings.TrimSpace(call.Name) == "" ||
+		strings.TrimSpace(call.UUID) == "" ||
+		call.Args == nil {
+		return
+	}
 	go conn.dealCallReq(call)
 }
 
 func (conn *Connection) onResp(payload []byte) {
 	resp := message.ResponsePayload{}
 	if json.Unmarshal(payload, &resp) != nil {
+		return
+	}
+
+	// 参数缺失或者为空
+	// NOTE: 无error字段, 认为无错误, 不视为出错
+	if strings.TrimSpace(resp.UUID) == "" || resp.Response == nil {
 		return
 	}
 
