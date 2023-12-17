@@ -695,9 +695,8 @@ func (conn *Connection) dealCallReq(call message.CallPayload) {
 		errStr,
 		resp))
 
-	if conn.sendMsg(msg) != nil {
-		// TODO: 发送失败是否需要写日志
-	}
+	// TODO: 发送失败是否需要写日志
+	_ = conn.sendMsg(msg)
 }
 
 func (conn *Connection) addRespWaiter(uuid string) *RespWaiter {

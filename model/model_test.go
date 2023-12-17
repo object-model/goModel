@@ -1136,6 +1136,126 @@ func TestDealInvalidCallMsg(t *testing.T) {
 	}
 }
 
+// TestDealResponseMsg 测试响应报文的处理逻辑
+func TestDealResponseMsg(t *testing.T) {
+
+	const uuidStr = `12345`
+
+	type TestCase struct {
+		msg      []byte          // 测试报文数据
+		isWake   bool            // 期望是否唤醒等待器
+		wantErr  error           // 期望的响应错误
+		wantResp message.RawResp // 期望的响应数据
+		desc     string          // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"response","payload":[]}`),
+			desc: "payload不是对象",
+		},
+
+		{
+			msg:  []byte(`{"type":"response","payload":{}}`),
+			desc: "payload缺失字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"response","payload":{"uuid":"   ","response":{}}}`),
+			desc: "uuid字段为空",
+		},
+
+		{
+			msg:  []byte(`{"type":"response","payload":{"uuid":"12345","response":null}}`),
+			desc: "resp字段为null",
+		},
+
+		{
+			msg:  []byte(`{"type":"response","payload":{"uuid":"not existed","response":{}}}`),
+			desc: "响应报文无对应的等待器",
+		},
+
+		{
+			msg:      []byte(`{"type":"response","payload":{"uuid":"12345","response":{}}}`),
+			isWake:   true,
+			wantErr:  nil,
+			wantResp: message.RawResp{},
+			desc:     "error字段缺失,响应为空",
+		},
+
+		{
+			msg:      []byte(`{"type":"response","payload":{"uuid":"12345","error":"   ","response":{}}}`),
+			isWake:   true,
+			wantErr:  nil,
+			wantResp: message.RawResp{},
+			desc:     "error字段为空字符串,响应为空",
+		},
+
+		{
+			msg:      []byte(`{"type":"response","payload":{"uuid":"12345","error":"  arg \"a\": missing ","response":{}}}`),
+			isWake:   true,
+			wantErr:  errors.New(`arg "a": missing`),
+			wantResp: message.RawResp{},
+			desc:     "error字段为有效错误,响应为空",
+		},
+
+		{
+			msg:     []byte(`{"type":"response","payload":{"uuid":"12345","error":" ","response":{"res":true,"time":100}}}`),
+			isWake:  true,
+			wantErr: nil,
+			wantResp: message.RawResp{
+				"res":  []byte(`true`),
+				"time": []byte(`100`),
+			},
+			desc: "无错误信息的响应",
+		},
+	}
+
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	})
+	require.Nil(t, err)
+
+	for _, test := range testCases {
+		fmt.Println(test.desc)
+
+		mockOnClose := new(mockCloseHandler)
+		mockedConn := new(mockConn)
+
+		waiter := &RespWaiter{
+			got: make(chan struct{}),
+		}
+
+		conn := newConn(server, mockedConn, WithClosedHandler(mockOnClose))
+		conn.respWaiters = map[string]*RespWaiter{
+			uuidStr: waiter,
+		}
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		server.dealConn(conn)
+
+		// 如果期望唤醒则检查等待器的唤醒状态等信息
+		if test.isWake {
+			select {
+			case <-waiter.got:
+				assert.EqualValues(t, test.wantErr, waiter.err, "错误信息与报文不一致", test.desc)
+				assert.EqualValues(t, test.wantResp, waiter.resp, "返回值与报文不一致", test.desc)
+			default:
+				assert.Fail(t, "等待器未唤醒", test.desc)
+			}
+		}
+
+		mockedConn.AssertExpectations(t)
+		mockOnClose.AssertExpectations(t)
+	}
+
+}
+
 func (s *StateEventSuite) TestDialTcp() {
 	go func() {
 		_ = s.server.ListenServeTCP(":61234")
