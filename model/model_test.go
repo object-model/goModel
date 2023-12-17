@@ -268,18 +268,35 @@ func (s *StateEventSuite) TestPushEvent_Error() {
 
 // TestDealInvalidJsonMsg 测试收到无效的JSON数据的情况
 func (s *StateEventSuite) TestDealInvalidJsonMsg() {
+	wantErrStr := "connection closed for: decode json:"
 	mockedConn := new(mockConn)
-
+	waiter := &RespWaiter{
+		got: make(chan struct{}),
+	}
 	conn1 := newConn(s.server, mockedConn, WithClosedFunc(func(reason string) {
 		fmt.Println("onClosed:", reason)
-		assert.Contains(s.T(), reason, "decode json:", "解码JSON错误")
+		assert.Contains(s.T(), reason, "decode json: ", "解码JSON错误时关闭回调函数行为")
 	}))
+	conn1.respWaiters = map[string]*RespWaiter{
+		"123": waiter,
+	}
 
 	mockedConn.On("ReadMsg").Return([]byte(`{{123]`), nil).Once()
 	mockedConn.On("Close").Return(errors.New("already closed")).Once()
 
 	s.server.dealConn(conn1)
 
+	assert.Contains(s.T(), conn1.peerMetaErr.Error(), wantErrStr, "解码JSON错误时对端元信息错误信息")
+
+	select {
+	case <-waiter.got:
+		assert.Contains(s.T(), waiter.err.Error(), wantErrStr)
+		assert.EqualValues(s.T(), message.RawResp{}, waiter.resp)
+	default:
+		assert.Fail(s.T(), "等待器未唤醒")
+	}
+
+	assert.Len(s.T(), conn1.respWaiters, 0, "响应等待器已清空")
 	assert.Len(s.T(), s.server.allConn, 0, "管理的连接必须为空")
 
 	mockedConn.AssertExpectations(s.T())
@@ -1255,11 +1272,84 @@ func TestDealResponseMsg(t *testing.T) {
 			assert.Fail(t, "等待器未唤醒", test.desc)
 		}
 
+		assert.Len(t, conn.respWaiters, 0, "响应等待器已清空")
+
 		mockedConn.AssertExpectations(t)
 		mockOnClose.AssertExpectations(t)
 	}
 
 	assert.Len(t, server.allConn, 0, "管理的连接必须为空")
+}
+
+func TestDealMetaInfoMsg(t *testing.T) {
+
+	type TestCase struct {
+		msg     []byte // 测试报文数据
+		wantErr error  // 期望的元信息错误
+		desc    string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			msg:     nil,
+			wantErr: errors.New("connection closed for: EOF"),
+			desc:    "未收到元信息连接就关闭",
+		},
+
+		{
+			msg:     []byte(`{"type":"meta-info","payload":123}`),
+			wantErr: errors.New("root: NOT an object"),
+			desc:    "元信息不为对象",
+		},
+
+		{
+			msg:     []byte(`{"type":"meta-info","payload":{}}`),
+			wantErr: errors.New("root: name NOT exist"),
+			desc:    "name字段不存在",
+		},
+
+		{
+			msg:     []byte(`{"type":"meta-info","payload":{"name":"tpqs"}}`),
+			wantErr: errors.New("root: description NOT exist"),
+			desc:    "description字段不存在",
+		},
+	}
+
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	})
+	require.Nil(t, err)
+
+	for _, test := range testCases {
+		fmt.Println(test.desc)
+
+		mockOnClose := new(mockCloseHandler)
+		mockedConn := new(mockConn)
+
+		conn := newConn(server, mockedConn, WithClosedHandler(mockOnClose))
+
+		mockOnClose.On("OnClosed", io.EOF.Error()).Once()
+		if test.msg != nil {
+			mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
+		}
+		mockedConn.On("ReadMsg").Return([]byte(nil), io.EOF).Once()
+		mockedConn.On("Close").Return(errors.New("already closed")).Once()
+
+		server.dealConn(conn)
+
+		select {
+		case <-conn.metaGotCh:
+		default:
+			assert.Fail(t, "未唤醒元信息等待", test.desc)
+		}
+
+		assert.EqualValues(t, test.wantErr, conn.peerMetaErr, "期望的对端元信息错误")
+
+		mockedConn.AssertExpectations(t)
+		mockOnClose.AssertExpectations(t)
+	}
+
 }
 
 func (s *StateEventSuite) TestDialTcp() {
