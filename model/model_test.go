@@ -1729,7 +1729,7 @@ func TestConnection_AddSubEvent(t *testing.T) {
 // TestConnection_CancelSubEvent 测试发送取消事件订阅报文
 func TestConnection_CancelSubEvent(t *testing.T) {
 	type TestCase struct {
-		states  []string // 输入的状态列表
+		events  []string // 输入的状态列表
 		err     error    // 连接应答返回的错误信息
 		wantMsg []byte   // 连接期望发送的数据
 		desc    string   // 用例描述
@@ -1737,45 +1737,45 @@ func TestConnection_CancelSubEvent(t *testing.T) {
 
 	testCases := []TestCase{
 		{
-			states:  nil,
+			events:  nil,
 			err:     nil,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
-			desc:    "传入的states为nil",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil",
 		},
 
 		{
-			states:  nil,
+			events:  nil,
 			err:     io.EOF,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
-			desc:    "传入的states为nil---发送失败",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil---发送失败",
 		},
 
 		{
-			states:  []string{},
+			events:  []string{},
 			err:     nil,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
-			desc:    "传入的states为空",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空",
 		},
 
 		{
-			states:  []string{},
+			events:  []string{},
 			err:     io.EOF,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
-			desc:    "传入的states为空---发送失败",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空---发送失败",
 		},
 
 		{
-			states:  []string{"A/a", "B/b"},
+			events:  []string{"A/a", "B/b"},
 			err:     nil,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
-			desc:    "传入的states不为空",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空",
 		},
 
 		{
-			states:  []string{"A/a", "B/b"},
+			events:  []string{"A/a", "B/b"},
 			err:     io.EOF,
-			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
-			desc:    "传入的states不为空---发送失败",
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空---发送失败",
 		},
 	}
 
@@ -1785,7 +1785,7 @@ func TestConnection_CancelSubEvent(t *testing.T) {
 
 		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
 
-		gotErr := conn.CancelSubState(test.states)
+		gotErr := conn.CancelSubEvent(test.events)
 
 		assert.EqualValues(t, test.err, gotErr, test.desc)
 
