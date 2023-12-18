@@ -31,7 +31,6 @@ type msg struct {
 }
 
 type stateOrEventMessage struct {
-	Source   string // 发送者的物模型名称
 	Name     string // 状态或者事件名称
 	FullData []byte // 全报文原始数据，是Message类型序列化的结果
 }
@@ -344,7 +343,6 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 	}
 
 	m.stateBroadcast <- stateOrEventMessage{
-		Source:   m.MetaInfo.Name,
 		Name:     state.Name,
 		FullData: fullData,
 	}
@@ -368,7 +366,6 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 	}
 
 	m.eventBroadcast <- stateOrEventMessage{
-		Source:   m.MetaInfo.Name,
 		Name:     event.Name,
 		FullData: fullData,
 	}

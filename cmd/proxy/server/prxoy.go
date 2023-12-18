@@ -158,7 +158,6 @@ func (s *Server) pushOnlineOrOfflineEvent(modelName string, addr string, online 
 	}))
 
 	s.eventChan <- stateOrEventMessage{
-		Source:   "proxy",
 		Name:     EventName,
 		FullData: fullData,
 	}
@@ -172,8 +171,7 @@ func (s *Server) pushMetaCheckErrorEvent(checkErr error, m *model) {
 	}))
 
 	event := stateOrEventMessage{
-		Source:   "proxy",
-		Name:     "metaCheckError",
+		Name:     "proxy/metaCheckError",
 		FullData: fullData,
 	}
 
@@ -194,8 +192,7 @@ func (s *Server) pushRepeatModelNameEvent(m *model) {
 	}))
 
 	event := stateOrEventMessage{
-		Source:   "proxy",
-		Name:     "repeatModelNameError",
+		Name:     "proxy/repeatModelNameError",
 		FullData: fullData,
 	}
 
