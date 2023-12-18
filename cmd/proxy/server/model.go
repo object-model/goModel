@@ -333,6 +333,16 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 		return err
 	}
 
+	// name字段为空或不存在
+	if strings.TrimSpace(state.Name) == "" {
+		return errors.New("name NOT exist or empty")
+	}
+
+	// data字段为null或不存在
+	if state.Data == nil {
+		return errors.New("data NOT exist or null")
+	}
+
 	m.stateBroadcast <- stateOrEventMessage{
 		Source:   m.MetaInfo.Name,
 		Name:     state.Name,
@@ -345,6 +355,16 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 	var event message.EventPayload
 	if err := jsoniter.Unmarshal(payload, &event); err != nil {
 		return err
+	}
+
+	// name字段为空或不存在
+	if strings.TrimSpace(event.Name) == "" {
+		return errors.New("name NOT exist or empty")
+	}
+
+	// args字段为null或不存在
+	if event.Args == nil {
+		return errors.New("args NOT exist or null")
 	}
 
 	m.eventBroadcast <- stateOrEventMessage{
@@ -361,10 +381,21 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		return err
 	}
 
+	// uuid字段为空或不存在
+	if strings.TrimSpace(call.UUID) == "" {
+		return errors.New("uuid NOT exist or empty")
+	}
+
+	// args字段不存在或为空
+	if call.Args == nil {
+		errStr := "args NOT exist or empty"
+		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, errStr, message.Resp{}))
+		return nil
+	}
+
 	modelName, methodName, err := splitModelName(call.Name)
 	if err != nil {
-		resp := make(map[string]interface{})
-		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, err.Error(), resp))
+		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, err.Error(), message.Resp{}))
 		return nil
 	}
 
@@ -383,6 +414,11 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 	var resp message.ResponsePayload
 	if err := jsoniter.Unmarshal(payload, &resp); err != nil {
 		return err
+	}
+
+	// uuid字段为空或不存在
+	if strings.TrimSpace(resp.UUID) == "" {
+		return errors.New("uuid NOT exist or empty")
 	}
 
 	m.respChan <- responseMessage{
