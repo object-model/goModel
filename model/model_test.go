@@ -1281,6 +1281,7 @@ func TestDealResponseMsg(t *testing.T) {
 	assert.Len(t, server.allConn, 0, "管理的连接必须为空")
 }
 
+// TestDealMetaInfoMsg 测试元信息报文处理逻辑
 func TestDealMetaInfoMsg(t *testing.T) {
 
 	type TestCase struct {
@@ -1350,6 +1351,482 @@ func TestDealMetaInfoMsg(t *testing.T) {
 		mockOnClose.AssertExpectations(t)
 	}
 
+}
+
+// TestConnection_SubState 测试发送状态订阅报文
+func TestConnection_SubState(t *testing.T) {
+	type TestCase struct {
+		states  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			states:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil",
+		},
+
+		{
+			states:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil---发送失败",
+		},
+
+		{
+			states:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空",
+		},
+
+		{
+			states:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空---发送失败",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.SubState(test.states)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+
+}
+
+// TestConnection_AddSubState 测试发送添加状态订阅报文
+func TestConnection_AddSubState(t *testing.T) {
+	type TestCase struct {
+		states  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			states:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil",
+		},
+
+		{
+			states:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil---发送失败",
+		},
+
+		{
+			states:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空",
+		},
+
+		{
+			states:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空---发送失败",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.AddSubState(test.states)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
+// TestConnection_CancelSubState 测试发送取消状态订阅报文
+func TestConnection_CancelSubState(t *testing.T) {
+	type TestCase struct {
+		states  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			states:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil",
+		},
+
+		{
+			states:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil---发送失败",
+		},
+
+		{
+			states:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空",
+		},
+
+		{
+			states:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空---发送失败",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.CancelSubState(test.states)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
+// TestConnection_CancelAllSubState 测试发送取消所有状态订阅报文
+func TestConnection_CancelAllSubState(t *testing.T) {
+	type TestCase struct {
+		err     error  // 连接应答返回的错误信息
+		wantMsg []byte // 连接期望发送的数据
+		desc    string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "发送成功",
+		},
+
+		{
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.CancelAllSubState()
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
+// TestConnection_SubEvent 测试发送事件订阅报文
+func TestConnection_SubEvent(t *testing.T) {
+	type TestCase struct {
+		events  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			events:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil",
+		},
+
+		{
+			events:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil---发送失败",
+		},
+
+		{
+			events:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空",
+		},
+
+		{
+			events:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空---发送失败",
+		},
+
+		{
+			events:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空",
+		},
+
+		{
+			events:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"set-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.SubEvent(test.events)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+
+}
+
+// TestConnection_AddSubEvent 测试发送添加事件订阅报文
+func TestConnection_AddSubEvent(t *testing.T) {
+	type TestCase struct {
+		events  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			events:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil",
+		},
+
+		{
+			events:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":[]}`),
+			desc:    "传入的events为nil---发送失败",
+		},
+
+		{
+			events:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空",
+		},
+
+		{
+			events:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":[]}`),
+			desc:    "传入的events为空---发送失败",
+		},
+
+		{
+			events:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空",
+		},
+
+		{
+			events:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"add-subscribe-event","payload":["A/a","B/b"]}`),
+			desc:    "传入的events不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.AddSubEvent(test.events)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
+// TestConnection_CancelSubEvent 测试发送取消事件订阅报文
+func TestConnection_CancelSubEvent(t *testing.T) {
+	type TestCase struct {
+		states  []string // 输入的状态列表
+		err     error    // 连接应答返回的错误信息
+		wantMsg []byte   // 连接期望发送的数据
+		desc    string   // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			states:  nil,
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil",
+		},
+
+		{
+			states:  nil,
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为nil---发送失败",
+		},
+
+		{
+			states:  []string{},
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空",
+		},
+
+		{
+			states:  []string{},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":[]}`),
+			desc:    "传入的states为空---发送失败",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空",
+		},
+
+		{
+			states:  []string{"A/a", "B/b"},
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-state","payload":["A/a","B/b"]}`),
+			desc:    "传入的states不为空---发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.CancelSubState(test.states)
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
+// TestConnection_CancelAllSubEvent 测试发送取消所有状态订阅报文
+func TestConnection_CancelAllSubEvent(t *testing.T) {
+	type TestCase struct {
+		err     error  // 连接应答返回的错误信息
+		wantMsg []byte // 连接期望发送的数据
+		desc    string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			err:     nil,
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "发送成功",
+		},
+
+		{
+			err:     io.EOF,
+			wantMsg: []byte(`{"type":"remove-subscribe-event","payload":[]}`),
+			desc:    "发送失败",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+
+		mockedConn.On("WriteMsg", test.wantMsg).Return(test.err)
+
+		gotErr := conn.CancelAllSubEvent()
+
+		assert.EqualValues(t, test.err, gotErr, test.desc)
+
+		mockedConn.AssertExpectations(t)
+	}
 }
 
 func (s *StateEventSuite) TestDialTcp() {
