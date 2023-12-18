@@ -48,6 +48,23 @@ const ProxyMetaString = `
         },
 
         {
+            "name": "closed",
+            "description": "连接关闭事件",
+            "args": [
+                {
+                    "name": "addr",
+                    "description": "IP地址:端口号",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "description": "关闭原因",
+                    "type": "string"
+                }
+            ]
+        },
+
+        {
             "name": "metaCheckError",
             "description": "物模型元信息校验错误事件",
             "args": [

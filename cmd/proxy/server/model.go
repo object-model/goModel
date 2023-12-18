@@ -83,6 +83,7 @@ type model struct {
 	bufferDone      chan struct{}                 // 挂起报文处理完成信号
 	bufferErr       chan struct{}                 // 挂起报文处理出错信号
 	bufferExit      chan struct{}                 // bufferMsgHandler 退出信号
+	closeReason     string                        // 连接关闭原因
 }
 
 func (m *model) Close() error {
@@ -147,14 +148,17 @@ func (m *model) reader() {
 		// NOTE: 否则，会导致提前删除了m, 进一步导致可能出现访问无效内存
 		<-m.bufferExit
 
+		// 推送连接关闭事件
+		m.notifyClosed()
+
 		// 通过Server退出writer
-		// TODO: 删除原因也考虑
 		m.removeConnCh <- m
 	}()
 	for {
 		// 读取报文
 		data, err := m.ReadMsg()
 		if err != nil {
+			m.closeReason = err.Error()
 			break
 		}
 
@@ -168,13 +172,30 @@ func (m *model) reader() {
 		// 解析JSON报文
 		msg := message.RawMessage{}
 		if err = jsoniter.Unmarshal(data, &msg); err != nil {
+			m.closeReason = err.Error()
 			break
 		}
 
 		// 处理包
 		if err = m.dealMsg(msg.Type, msg.Payload, data); err != nil {
+			m.closeReason = err.Error()
 			break
 		}
+	}
+}
+
+func (m *model) notifyClosed() {
+	fullData := message.Must(message.EncodeEventMsg("proxy/closed", message.Args{
+		"addr":   m.RemoteAddr().String(),
+		"reason": m.closeReason,
+	}))
+
+	// 无论m是否订阅closed事件都主动推送
+	m.writeChan <- fullData
+
+	m.eventBroadcast <- stateOrEventMessage{
+		Name:     "proxy/closed",
+		FullData: fullData,
 	}
 }
 
