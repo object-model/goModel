@@ -680,6 +680,9 @@ func (conn *Connection) dealCallReq(call message.CallPayload) {
 
 	// 6.调用回调
 	resp := conn.m.callReqHandler.OnCallReq(methodName, args)
+	if resp == nil {
+		resp = message.Resp{}
+	}
 
 	// 7.校验响应
 	errStr := ""

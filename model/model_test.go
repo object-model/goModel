@@ -945,6 +945,18 @@ func TestDealCallMsg(t *testing.T) {
 				"angle": []byte(`90`),
 				"speed": []byte(`"fast"`),
 			},
+			resp:    nil,
+			wantMsg: []byte(`{"type":"response","payload":{"uuid":"123456","error":"","response":{}}}`),
+			desc:    "没有开启响应校验---回调返回的是nil",
+		},
+
+		{
+			msg:       []byte(`{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123456","args":{"angle":90,"speed":"fast"}}}`),
+			hasOnCall: true,
+			wantArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"fast"`),
+			},
 			resp: message.Resp{
 				"res": true,
 				"msg": "执行成功",
