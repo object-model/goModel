@@ -148,6 +148,7 @@ func (m *model) reader() {
 		<-m.bufferExit
 
 		// 通过Server退出writer
+		// TODO: 删除原因也考虑
 		m.removeConnCh <- m
 	}()
 	for {
