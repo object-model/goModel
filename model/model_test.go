@@ -1841,6 +1841,102 @@ func TestConnection_CancelAllSubEvent(t *testing.T) {
 	}
 }
 
+// TestConnection_Invoke 测试异步调用接口
+func TestConnection_Invoke(t *testing.T) {
+	type TestCase struct {
+		name    string       // 调用的方法名
+		args    message.Args // 调用参数
+		uid     string       // uuid生成的字符串
+		wantErr error        // 期望返回的错误信息
+		sendMsg bool         // 连接是否发送数据
+		wantMsg []byte       // 连接期望发送的数据
+		desc    string       // 用例描述
+	}
+
+	uidPitcher := func(test TestCase) func() string {
+		return func() string {
+			return test.uid
+		}
+	}
+
+	testCases := []TestCase{
+		{
+			name: "m/qs",
+			args: message.Args{
+				"a": func() {},
+			},
+			wantErr: errors.New("encode call args failed"),
+			desc:    "调用参数无法编码---包含函数",
+		},
+
+		{
+			name: "m/qs",
+			args: message.Args{
+				"a": make(chan int),
+			},
+			wantErr: errors.New("encode call args failed"),
+			desc:    "调用参数无法编码---包含管道",
+		},
+
+		{
+			name:    "m/qs",
+			args:    nil,
+			uid:     "123",
+			sendMsg: true,
+			wantMsg: []byte(`{"type":"call","payload":{"name":"m/qs","uuid":"123","args":{}}}`),
+			wantErr: io.EOF,
+			desc:    "发送失败",
+		},
+
+		{
+			name:    "m/qs",
+			args:    nil,
+			uid:     "123",
+			sendMsg: true,
+			wantMsg: []byte(`{"type":"call","payload":{"name":"m/qs","uuid":"123","args":{}}}`),
+			wantErr: nil,
+			desc:    "发送成功---参数为空",
+		},
+
+		{
+			name: "m/qs",
+			args: message.Args{
+				"cmd":   "QS",
+				"speed": "fast",
+			},
+			uid:     "45678",
+			sendMsg: true,
+			wantMsg: []byte(`{"type":"call","payload":{"name":"m/qs","uuid":"45678","args":{"cmd":"QS","speed":"fast"}}}`),
+			wantErr: nil,
+			desc:    "发送成功---参数不为空",
+		},
+	}
+
+	for _, test := range testCases {
+		mockedConn := new(mockConn)
+		conn := newConn(NewEmptyModel(), mockedConn)
+		conn.uidCreator = uidPitcher(test)
+
+		if test.sendMsg {
+			mockedConn.On("WriteMsg", test.wantMsg).Return(test.wantErr)
+		}
+
+		resp, gotErr := conn.Invoke(test.name, test.args)
+
+		assert.EqualValues(t, test.wantErr, gotErr, test.desc)
+
+		if test.wantErr == nil {
+			assert.Contains(t, conn.respWaiters, test.uid, test.desc)
+			assert.Equal(t, conn.respWaiters[test.uid], resp, test.desc)
+		} else {
+			// 返回错误的情况下, 等待器一定为nil
+			assert.Nil(t, resp, test.desc)
+		}
+
+		mockedConn.AssertExpectations(t)
+	}
+}
+
 func (s *StateEventSuite) TestDialTcp() {
 	go func() {
 		_ = s.server.ListenServeTCP(":61234")

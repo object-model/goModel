@@ -84,6 +84,7 @@ type Connection struct {
 	peerMetaErr     error                     // 查询对端元信息的错误
 	waitersLock     sync.Mutex                // 保护 respWaiters
 	respWaiters     map[string]*RespWaiter    // 所有未收到响应的调用等待器
+	uidCreator      func() string             // uuid生成器
 }
 
 // ConnOption 为创建连接选项
@@ -178,6 +179,7 @@ func newConn(m *Model, raw rawConn.RawConn, opts ...ConnOption) *Connection {
 		peerMeta:      meta.NewEmptyMeta(),
 		peerMetaErr:   fmt.Errorf("have NOT got peer meta yet"),
 		respWaiters:   make(map[string]*RespWaiter),
+		uidCreator:    uuid.NewString,
 	}
 
 	ans.msgHandlers = map[string]func([]byte){
@@ -258,7 +260,7 @@ func (conn *Connection) CancelAllSubEvent() error {
 // Invoke 通过连接conn发送调用请求报文,以异步的方式远程调用名为fullName的方法,调用参数为args,
 // 返回用于等待该次调用的响应的等待对象和错误信息. 出错时该函数返回的等待对象为nil.
 func (conn *Connection) Invoke(fullName string, args message.Args) (*RespWaiter, error) {
-	uid := uuid.NewString()
+	uid := conn.uidCreator()
 	msg, err := message.EncodeCallMsg(fullName, uid, args)
 	if err != nil {
 		return nil, err
@@ -266,7 +268,7 @@ func (conn *Connection) Invoke(fullName string, args message.Args) (*RespWaiter,
 	waiter := conn.addRespWaiter(uid)
 	if err = conn.sendMsg(msg); err != nil {
 		conn.removeRespWaiter(uid)
-		return nil, errors.New("send call request failed")
+		return nil, err
 	}
 
 	return waiter, nil
