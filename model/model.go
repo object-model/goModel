@@ -131,7 +131,8 @@ func (m *Model) ListenServeTCP(addr string) error {
 }
 
 func (m *Model) ListenServeWebSocket(addr string) error {
-	http.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
 		conn, err := upgrader.Upgrade(writer, request, nil)
 		if err != nil {
 			return
@@ -139,7 +140,7 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 
 		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
 	})
-	return http.ListenAndServe(addr, nil)
+	return http.ListenAndServe(addr, mux)
 }
 
 func (m *Model) PushState(name string, data interface{}, verify bool) error {

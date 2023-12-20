@@ -1983,7 +1983,7 @@ func TestConnection_Invoke(t *testing.T) {
 	}
 }
 
-// 调用示例
+// 同步调用示例
 type callSample struct {
 	args    message.Args    // 客户端的调用参数
 	rawArgs message.RawArgs // 服务端收到的调用参数
@@ -1997,10 +1997,10 @@ type CallSuite struct {
 	suite.Suite
 	server     *Model              // 服务端物模型
 	mockOnCall *mockCallReqHandler // 调用请求模拟
-	calls      []callSample
-	tcpAddr    string // tcp地址
-	wsAddr     string // ws地址
-	wg         sync.WaitGroup
+	calls      []callSample        // 同步调用示例
+	tcpAddr    string              // tcp地址
+	wsAddr     string              // ws地址
+	wg         sync.WaitGroup      // 等待客户端完成信号
 }
 
 func (c *CallSuite) SetupSuite() {
@@ -2208,4 +2208,267 @@ func (c *CallSuite) TestWSClient() {
 // TestCall 测试真实环境下同步调用
 func TestCall(t *testing.T) {
 	suite.Run(t, new(CallSuite))
+}
+
+// 同步加超时调用示例
+type callForSample struct {
+	args     message.Args    // 客户端的调用参数
+	callIsOn bool            // 服务端回调函数是否触发
+	rawArgs  message.RawArgs // 服务端收到的调用参数
+	resp     message.Resp    // 服务端回调返回的响应值
+	exeTime  time.Duration   // 服务端回调执行时间
+	rawResp  message.RawResp // 客户端收到的响应值
+	waitTime time.Duration   // 客户端等待时间
+	err      error           // 客户端调用错误信息
+	desc     string          // 用例描述
+}
+
+// CallForSuite 为同步+超时调用测试套件
+type CallForSuite struct {
+	suite.Suite
+	server     *Model              // 服务端物模型
+	mockOnCall *mockCallReqHandler // 调用请求模拟
+	calls      []callForSample     // 同步+超时调用示例
+	tcpAddr    string              // tcp地址
+	wsAddr     string              // ws地址
+	wg         sync.WaitGroup      // 等待客户端完成信号
+}
+
+func (c *CallForSuite) SetupSuite() {
+	c.tcpAddr = "localhost:60000"
+	c.wsAddr = "localhost:60001"
+
+	c.mockOnCall = new(mockCallReqHandler)
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	}, WithVerifyResp(), WithCallReqHandler(c.mockOnCall))
+	require.Nil(c.T(), err)
+
+	c.server = server
+
+	c.calls = []callForSample{
+		{
+			args: message.Args{
+				"angle": 90,
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("arg \"speed\": missing"),
+			desc:     "调用参数不符合元信息---调用参数缺失",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "unknown",
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("arg \"speed\": \"unknown\" NOT in option"),
+			desc:     "调用参数不符合元信息---调用参数不再可选项范围中",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "fast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"fast"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(90000),
+				"code": 0,
+			},
+			exeTime: 0,
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`90000`),
+				"code": []byte(`0`),
+			},
+			waitTime: time.Second,
+			err:      nil,
+			desc:     "执行成功---等待时间大于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 45,
+				"speed": "middle",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`45`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(45000),
+				"code": 0,
+			},
+			exeTime:  time.Second * 2,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("timeout"),
+			desc:     "执行成功---等待超时小于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 45,
+				"speed": "superFast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`45`),
+				"speed": []byte(`"superFast"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(45000),
+			},
+			exeTime: time.Second,
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`45000`),
+			},
+			waitTime: time.Second * 2,
+			err:      errors.New("response \"code\": missing"),
+			desc:     "回调函数返回值不符合元信息---等待时间大于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 60,
+				"speed": "superFast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`60`),
+				"speed": []byte(`"superFast"`),
+			},
+			resp: message.Resp{
+				"res":  false,
+				"msg":  "执行失败",
+				"time": uint(45000),
+				"code": 4,
+			},
+			exeTime:  time.Second * 2,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("timeout"),
+			desc:     "回调函数返回值不符合元信息---等待时间小于执行时间",
+		},
+	}
+
+	for _, call := range c.calls {
+		if call.callIsOn {
+			c.mockOnCall.
+				On("OnCallReq", "QS", call.rawArgs).
+				After(call.exeTime).
+				Return(call.resp).
+				Times(2)
+		}
+	}
+
+	go func() {
+		fmt.Printf("listen tcp@%s\n", c.tcpAddr)
+		err := server.ListenServeTCP(c.tcpAddr)
+		require.NotNil(c.T(), err)
+	}()
+
+	go func() {
+		fmt.Printf("listen ws@%s\n", c.wsAddr)
+		err := server.ListenServeWebSocket(c.wsAddr)
+		require.NotNil(c.T(), err)
+	}()
+
+	c.wg.Add(2)
+}
+
+func (c *CallForSuite) client(conn *Connection) {
+	// 查询对端元信息
+	metaInfo, err := conn.GetPeerMeta()
+	require.Nil(c.T(), err, "首次获取对端元信息")
+
+	assert.Equal(c.T(), "A/car/#1/tpqs", metaInfo.Name, "对端元信息---模型名")
+	assert.Equal(c.T(), []string{
+		"A/car/#1/tpqs/tpqsInfo",
+		"A/car/#1/tpqs/powerInfo",
+		"A/car/#1/tpqs/gear",
+		"A/car/#1/tpqs/QSCount",
+	}, metaInfo.AllStates(), "对端元信息---事件名")
+
+	assert.Equal(c.T(), []string{
+		"A/car/#1/tpqs/qsMotorOverCur",
+		"A/car/#1/tpqs/qsAction",
+	}, metaInfo.AllEvents(), "对端元信息---事件名")
+
+	assert.Equal(c.T(), []string{
+		"A/car/#1/tpqs/QS",
+	}, metaInfo.AllMethods(), "对端元信息---方法名")
+
+	// 二次查询元信息
+	metaInfo2, err := conn.GetPeerMeta()
+	require.Nil(c.T(), err, "第二次获取对端元信息")
+	assert.Equal(c.T(), metaInfo, metaInfo2, "两次获取的元信息要相同")
+
+	// 同步调用方法
+	for _, call := range c.calls {
+		resp, err := conn.CallFor("A/car/#1/tpqs/QS", call.args, call.waitTime)
+		assert.EqualValues(c.T(), call.err, err, call.desc)
+		assert.EqualValues(c.T(), call.rawResp, resp, call.desc)
+	}
+}
+
+func (c *CallForSuite) TestServerSide() {
+	c.T().Parallel()
+
+	// 等待所有客户端都运行完了
+	c.wg.Wait()
+
+	// NOTE: 最后再断言调用请求回调
+	c.mockOnCall.AssertExpectations(c.T())
+}
+
+func (c *CallForSuite) TestTCPClient() {
+	defer c.wg.Done()
+
+	c.T().Parallel()
+
+	conn, err := NewEmptyModel().DialTcp(c.tcpAddr)
+
+	require.Nil(c.T(), err)
+	require.NotNil(c.T(), conn)
+
+	c.client(conn)
+}
+
+func (c *CallForSuite) TestWSClient() {
+	defer c.wg.Done()
+
+	c.T().Parallel()
+
+	conn, err := NewEmptyModel().DialWebSocket("ws://" + c.wsAddr)
+
+	require.Nil(c.T(), err)
+	require.NotNil(c.T(), conn)
+
+	c.client(conn)
+}
+
+// TestCallFor 测试真实环境下同步+超时调用
+func TestCallFor(t *testing.T) {
+	suite.Run(t, new(CallForSuite))
 }

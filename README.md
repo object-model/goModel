@@ -8,6 +8,27 @@ golang版本的物模型，包含物模型框架、远端代理服务和代码�
 
 1. 测试真实环境下同步调用
 
+2. 测试真实环境下同步+超时调用
+
+3. 物模型的ListenServeWebSocket启动http服务使用单独的路由配置对象，不使用http包默认的路由配置对象
+
+   ```go
+   func (m *Model) ListenServeWebSocket(addr string) error {
+   	mux := http.NewServeMux()
+   	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
+   		conn, err := upgrader.Upgrade(writer, request, nil)
+   		if err != nil {
+   			return
+   		}
+   
+   		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
+   	})
+   	return http.ListenAndServe(addr, mux)
+   }
+   ```
+
+   **目的：**原先的做法在一个程序内开两个物模型并都运行WebSocket服务时会奔溃，**因为都向http包中的默认路由`DefaultServeMux`注册了相同的路径！**
+
 ## 20221219
 
 1. 将uuid生成提取成Connection的一个成员，便于打桩测试
