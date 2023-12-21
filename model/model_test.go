@@ -1170,8 +1170,8 @@ func TestDealCallMsg(t *testing.T) {
 		mockedConn.On("ReadMsg").Return(test.msg, nil).Once()
 		mockedConn.On("WriteMsg", test.wantMsg).Return(nil).Once()
 
-		// NOTE: 目的是确保在需要调用回调是, 等回调返回再沿着
-		// NOTE: 否则由于回调还没来的及触发, 而导致提前验证不通过
+		// NOTE: 目的是确保在需要调用回调时, 等调用回调完成调用再验证
+		// NOTE: 否则由于调用回调还没来的及触发, 而导致提前验证不通过
 		mockedConn.On("ReadMsg").After(time.Second/10).Return([]byte(nil), io.EOF).Once()
 		mockedConn.On("Close").Return(errors.New("already closed")).Once()
 
@@ -2387,7 +2387,7 @@ func (c *CallForSuite) SetupSuite() {
 				"time": []byte(`90000`),
 				"code": []byte(`0`),
 			},
-			waitTime: time.Second,
+			waitTime: time.Millisecond * 100,
 			err:      nil,
 			desc:     "执行成功---等待时间大于执行时间",
 		},
@@ -2408,9 +2408,9 @@ func (c *CallForSuite) SetupSuite() {
 				"time": uint(45000),
 				"code": 0,
 			},
-			exeTime:  time.Second * 2,
+			exeTime:  time.Millisecond * 200,
 			rawResp:  message.RawResp{},
-			waitTime: time.Second,
+			waitTime: time.Millisecond * 100,
 			err:      errors.New("timeout"),
 			desc:     "执行成功---等待超时小于执行时间",
 		},
@@ -2430,13 +2430,13 @@ func (c *CallForSuite) SetupSuite() {
 				"msg":  "执行成功",
 				"time": uint(45000),
 			},
-			exeTime: time.Second,
+			exeTime: time.Millisecond * 100,
 			rawResp: message.RawResp{
 				"res":  []byte(`true`),
 				"msg":  []byte(`"执行成功"`),
 				"time": []byte(`45000`),
 			},
-			waitTime: time.Second * 2,
+			waitTime: time.Millisecond * 200,
 			err:      errors.New("response \"code\": missing"),
 			desc:     "回调函数返回值不符合元信息---等待时间大于执行时间",
 		},
@@ -2457,9 +2457,9 @@ func (c *CallForSuite) SetupSuite() {
 				"time": uint(45000),
 				"code": 4,
 			},
-			exeTime:  time.Second * 2,
+			exeTime:  time.Millisecond * 200,
 			rawResp:  message.RawResp{},
-			waitTime: time.Second,
+			waitTime: time.Millisecond * 100,
 			err:      errors.New("timeout"),
 			desc:     "回调函数返回值不符合元信息---等待时间小于执行时间",
 		},
@@ -2911,14 +2911,14 @@ func (invokeForSuite *InvokeForSuite) SetupSuite() {
 				"angle": []byte(`85`),
 				"speed": []byte(`"fast"`),
 			},
-			exeTime: time.Second * 2,
+			exeTime: time.Millisecond * 200,
 			resp: message.Resp{
 				"res":  true,
 				"msg":  "执行成功",
 				"time": uint(90000),
 				"code": 0,
 			},
-			waitTime: time.Second,
+			waitTime: time.Millisecond * 100,
 			rawResp:  message.RawResp{},
 			err:      errors.New("timeout"),
 			desc:     "执行成功---等待时间小于执行时间",
@@ -2934,7 +2934,7 @@ func (invokeForSuite *InvokeForSuite) SetupSuite() {
 				"angle": []byte(`40`),
 				"speed": []byte(`"superFast"`),
 			},
-			exeTime: time.Second,
+			exeTime: time.Millisecond * 100,
 			resp: message.Resp{
 				"res":  true,
 				"msg":  "执行成功",
@@ -2945,7 +2945,7 @@ func (invokeForSuite *InvokeForSuite) SetupSuite() {
 				"msg":  []byte(`"执行成功"`),
 				"time": []byte(`45000`),
 			},
-			waitTime: time.Second * 2,
+			waitTime: time.Millisecond * 200,
 			err:      errors.New("response \"code\": missing"),
 			desc:     "回调函数返回值不符合元信息---等待时间大于执行时间",
 		},
@@ -2965,9 +2965,9 @@ func (invokeForSuite *InvokeForSuite) SetupSuite() {
 				"msg":  "执行成功",
 				"time": uint(50000),
 			},
-			exeTime:  time.Second * 2,
+			exeTime:  time.Millisecond * 200,
 			rawResp:  message.RawResp{},
-			waitTime: time.Second * 1,
+			waitTime: time.Millisecond * 100,
 			err:      errors.New("timeout"),
 			desc:     "回调函数返回值不符合元信息---等待时间小于执行时间",
 		},
@@ -3011,7 +3011,7 @@ func (invokeForSuite *InvokeForSuite) client(conn *Connection) {
 	}
 
 	// 所有响应回调函数总的执行时间限制
-	// = 所有调用请求的等待时间 waitTime 之和 + 1s
+	// = 所有调用请求的等待时间 waitTime 之和 + 100ms
 	var timeout time.Duration
 
 	// 异步+回调+超时 调用方法
@@ -3020,7 +3020,7 @@ func (invokeForSuite *InvokeForSuite) client(conn *Connection) {
 		err := conn.InvokeFor("A/car/#1/tpqs/QS", call.args, creatRespFunc(call), call.waitTime)
 		assert.Nil(invokeForSuite.T(), err, call.desc)
 	}
-	timeout += time.Second
+	timeout += time.Millisecond * 100
 
 	// 确保所有回调函数执行了再退出
 	timer := time.NewTimer(timeout)
@@ -3111,7 +3111,7 @@ type CallCloseSuite struct {
 func (closeSuite *CallCloseSuite) SetupSuite() {
 	closeSuite.tcpAddr = "localhost:51888"
 	closeSuite.wsAddr = "localhost:51999"
-	closeSuite.exeTime = time.Second * 4
+	closeSuite.exeTime = time.Millisecond * 200
 	closeSuite.args = message.Args{
 		"angle": 90,
 		"speed": "fast",
@@ -3163,29 +3163,28 @@ func (closeSuite *CallCloseSuite) client(conn *Connection) {
 	waiter, err := conn.Invoke("A/car/#1/tpqs/QS", closeSuite.args)
 	closeSuite.Nil(err, "连接必须建立成功")
 
-	done := make(chan struct{}, closeSuite.waitNum*2)
+	done := sync.WaitGroup{}
 
 	waitFunc := func(waiter *RespWaiter) {
-		defer func() { done <- struct{}{} }()
+		defer done.Done()
 		resp, gotErr := waiter.Wait()
-		closeSuite.Require().Equal(errors.New("connection closed for: active close"), gotErr)
-		closeSuite.Assert().Equal(message.RawResp{}, resp)
+		require.Equal(closeSuite.T(), errors.New("connection closed for: active close"), gotErr)
+		assert.Equal(closeSuite.T(), message.RawResp{}, resp)
 	}
 
 	waitForFunc := func(waiter *RespWaiter) {
-		defer func() { done <- struct{}{} }()
-		resp, gotErr := waiter.WaitFor(closeSuite.exeTime + time.Second)
+		defer done.Done()
+		resp, gotErr := waiter.WaitFor(closeSuite.exeTime + time.Millisecond*100)
 
-		closeSuite.Require().Equal(errors.New("connection closed for: active close"), gotErr)
-		closeSuite.Assert().Equal(message.RawResp{}, resp)
+		require.Equal(closeSuite.T(), errors.New("connection closed for: active close"), gotErr)
+		assert.Equal(closeSuite.T(), message.RawResp{}, resp)
 	}
 
 	// 开启多个协程无限等待一个响应
-	var timeout time.Duration
 	for i := 0; i < closeSuite.waitNum; i++ {
+		done.Add(2)
 		go waitFunc(waiter)
 		go waitForFunc(waiter)
-		timeout += time.Second
 	}
 
 	// 方法执行到一半时间时关闭连接
@@ -3193,11 +3192,7 @@ func (closeSuite *CallCloseSuite) client(conn *Connection) {
 	_ = conn.Close()
 
 	// 等待回调函数执行完毕
-	for i := 0; i < closeSuite.waitNum*2; i++ {
-		select {
-		case <-done:
-		}
-	}
+	done.Wait()
 }
 
 func (closeSuite *CallCloseSuite) TestServerSide() {
@@ -3216,7 +3211,7 @@ func (closeSuite *CallCloseSuite) TestTCPClient() {
 	closeSuite.T().Parallel()
 
 	conn, err := NewEmptyModel().DialTcp(closeSuite.tcpAddr, WithClosedFunc(func(reason string) {
-		closeSuite.Equal("active close", reason)
+		require.Equal(closeSuite.T(), "active close", reason)
 	}))
 
 	require.Nil(closeSuite.T(), err)
@@ -3231,7 +3226,7 @@ func (closeSuite *CallCloseSuite) TestWSClient() {
 	closeSuite.T().Parallel()
 
 	conn, err := NewEmptyModel().DialWebSocket("ws://"+closeSuite.wsAddr, WithClosedFunc(func(reason string) {
-		closeSuite.Equal("active close", reason)
+		require.Equal(closeSuite.T(), "active close", reason)
 	}))
 
 	require.Nil(closeSuite.T(), err)
