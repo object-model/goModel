@@ -2539,7 +2539,7 @@ type invokeCallbackSample struct {
 	desc     string          // 用例描述
 }
 
-// InvokeCallbackSuite 为异步调用+回调调用
+// InvokeCallbackSuite 为异步调用+回调调用测试套件
 type InvokeCallbackSuite struct {
 	suite.Suite
 	server     *Model                 // 服务端物模型
@@ -2548,7 +2548,7 @@ type InvokeCallbackSuite struct {
 	tcpAddr    string                 // tcp地址
 	wsAddr     string                 // ws地址
 	wg         sync.WaitGroup         // 等待客户端完成信号
-
+	timeOut    time.Duration          // 所有响应回调必须在该时间内完成执行
 }
 
 func (callbackSuite *InvokeCallbackSuite) SetupSuite() {
@@ -2659,6 +2659,8 @@ func (callbackSuite *InvokeCallbackSuite) SetupSuite() {
 	}()
 
 	callbackSuite.wg.Add(2)
+
+	callbackSuite.timeOut = time.Second
 }
 
 func (callbackSuite *InvokeCallbackSuite) client(conn *Connection) {
@@ -2687,8 +2689,8 @@ func (callbackSuite *InvokeCallbackSuite) client(conn *Connection) {
 
 	// 确保所有回调函数执行了再退出
 	select {
-	case <-time.After(time.Second * 2):
-		callbackSuite.Fail("所有异步调用结果回调在2s内未完成")
+	case <-time.After(callbackSuite.timeOut):
+		callbackSuite.Fail("所有异步调用结果回调在规定时间内未执行完成")
 	case <-done:
 	}
 }
