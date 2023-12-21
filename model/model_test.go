@@ -2527,3 +2527,229 @@ func (c *CallForSuite) TestSendCallFailed() {
 func TestCallFor(t *testing.T) {
 	suite.Run(t, new(CallForSuite))
 }
+
+// 异步+超时调用示例
+type invokeCallbackSample struct {
+	args     message.Args    // 客户端的调用参数
+	callIsOn bool            // 服务端回调函数是否触发
+	rawArgs  message.RawArgs // 服务端收到的调用参数
+	resp     message.Resp    // 服务端回调返回的响应值
+	rawResp  message.RawResp // 客户端回调收到的响应值
+	err      error           // 客户端回调收到错误信息
+	desc     string          // 用例描述
+}
+
+// InvokeCallbackSuite 为异步调用+回调调用
+type InvokeCallbackSuite struct {
+	suite.Suite
+	server     *Model                 // 服务端物模型
+	mockOnCall *mockCallReqHandler    // 调用请求模拟
+	calls      []invokeCallbackSample // 异步+回调调用示例
+	tcpAddr    string                 // tcp地址
+	wsAddr     string                 // ws地址
+	wg         sync.WaitGroup         // 等待客户端完成信号
+
+}
+
+func (callbackSuite *InvokeCallbackSuite) SetupSuite() {
+	callbackSuite.tcpAddr = "localhost:50000"
+	callbackSuite.wsAddr = "localhost:50001"
+
+	callbackSuite.mockOnCall = new(mockCallReqHandler)
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	}, WithVerifyResp(), WithCallReqHandler(callbackSuite.mockOnCall))
+	require.Nil(callbackSuite.T(), err)
+
+	callbackSuite.server = server
+
+	callbackSuite.calls = []invokeCallbackSample{
+		{
+			args: message.Args{
+				"angle": 90,
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			err:      errors.New("arg \"speed\": missing"),
+			desc:     "调用参数不符合元信息---调用参数缺失",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "unknown",
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			err:      errors.New("arg \"speed\": \"unknown\" NOT in option"),
+			desc:     "调用参数不符合元信息---调用参数不再可选项范围中",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "fast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"fast"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(90000),
+				"code": 0,
+			},
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`90000`),
+				"code": []byte(`0`),
+			},
+			err:  nil,
+			desc: "执行成功",
+		},
+
+		{
+			args: message.Args{
+				"angle": 45,
+				"speed": "superFast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`45`),
+				"speed": []byte(`"superFast"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(45000),
+			},
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`45000`),
+			},
+			err:  errors.New("response \"code\": missing"),
+			desc: "回调函数返回值不符合元信息---参数缺失",
+		},
+	}
+
+	for _, call := range callbackSuite.calls {
+		if call.callIsOn {
+			callbackSuite.mockOnCall.
+				On("OnCallReq", "QS", call.rawArgs).
+				Return(call.resp).
+				Times(2)
+		}
+	}
+
+	go func() {
+		fmt.Printf("listen tcp@%s\n", callbackSuite.tcpAddr)
+		err := server.ListenServeTCP(callbackSuite.tcpAddr)
+		require.NotNil(callbackSuite.T(), err)
+	}()
+
+	go func() {
+		fmt.Printf("listen ws@%s\n", callbackSuite.wsAddr)
+		err := server.ListenServeWebSocket(callbackSuite.wsAddr)
+		require.NotNil(callbackSuite.T(), err)
+	}()
+
+	callbackSuite.wg.Add(2)
+}
+
+func (callbackSuite *InvokeCallbackSuite) client(conn *Connection) {
+	wg := sync.WaitGroup{}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	// 回调函数创建器
+	creatRespFunc := func(call invokeCallbackSample) RespFunc {
+		return func(resp message.RawResp, err error) {
+			defer wg.Done()
+			assert.Equal(callbackSuite.T(), call.rawResp, resp, "调用结果回调函数收到的响应", call.desc)
+			assert.Equal(callbackSuite.T(), call.err, err, "调用结果回调函数收到的错误信息", call.desc)
+		}
+	}
+
+	// 异步+回调调用方法
+	wg.Add(len(callbackSuite.calls))
+	for _, call := range callbackSuite.calls {
+		err := conn.InvokeByCallback("A/car/#1/tpqs/QS", call.args, creatRespFunc(call))
+		assert.Nil(callbackSuite.T(), err, call.desc)
+	}
+
+	// 确保所有回调函数执行了再退出
+	select {
+	case <-time.After(time.Second * 2):
+		callbackSuite.Fail("所有异步调用结果回调在2s内未完成")
+	case <-done:
+	}
+}
+
+func (callbackSuite *InvokeCallbackSuite) TestServerSide() {
+	callbackSuite.T().Parallel()
+
+	// 等待所有客户端都运行完了
+	callbackSuite.wg.Wait()
+
+	// NOTE: 最后再断言调用请求回调
+	callbackSuite.mockOnCall.AssertExpectations(callbackSuite.T())
+}
+
+func (callbackSuite *InvokeCallbackSuite) TestTCPClient() {
+	defer callbackSuite.wg.Done()
+
+	callbackSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialTcp(callbackSuite.tcpAddr)
+
+	require.Nil(callbackSuite.T(), err)
+	require.NotNil(callbackSuite.T(), conn)
+
+	callbackSuite.client(conn)
+}
+
+func (callbackSuite *InvokeCallbackSuite) TestWSClient() {
+	defer callbackSuite.wg.Done()
+
+	callbackSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialWebSocket("ws://" + callbackSuite.wsAddr)
+
+	require.Nil(callbackSuite.T(), err)
+	require.NotNil(callbackSuite.T(), conn)
+
+	callbackSuite.client(conn)
+}
+
+// 测试调用请求报文发送失败时CallFor的返回逻辑
+func (callbackSuite *InvokeCallbackSuite) TestSendCallFailed() {
+	mockedConn := new(mockConn)
+
+	conn := newConn(callbackSuite.server, mockedConn)
+	conn.uidCreator = func() string {
+		return "123"
+	}
+
+	callMsg := `{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123","args":{}}}`
+	mockedConn.On("WriteMsg", []byte(callMsg)).Return(io.EOF).Once()
+
+	err := conn.InvokeByCallback("A/car/#1/tpqs/QS", nil, func(resp message.RawResp, err error) {
+		callbackSuite.Fail("发送调用请求报文失败时回调函数不应当被触发")
+	})
+	assert.Equal(callbackSuite.T(), io.EOF, err, "发送调用请求失败时---返回的错误信息")
+
+	mockedConn.AssertExpectations(callbackSuite.T())
+}
+
+// TestInvokeByCallback 测试真实环境下异步+回调调用
+func TestInvokeByCallback(t *testing.T) {
+	suite.Run(t, new(InvokeCallbackSuite))
+}
