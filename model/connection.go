@@ -393,12 +393,13 @@ func (conn *Connection) close(reason string) error {
 	conn.notifyRespWaiterOnClose(reason)
 	conn.notifyMetaWaiterOnClose(reason)
 
-	err := conn.raw.Close()
-
 	// 调用关闭回调
 	conn.closedOnce.Do(func() {
 		conn.closedHandler.OnClosed(reason)
 	})
+
+	err := conn.raw.Close()
+
 	return err
 }
 

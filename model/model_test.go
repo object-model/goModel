@@ -3093,3 +3093,154 @@ func (invokeForSuite *InvokeForSuite) TestSendCallFailed() {
 func TestInvokeFor(t *testing.T) {
 	suite.Run(t, new(InvokeForSuite))
 }
+
+// CallCloseSuite 为真实环境下远程调用后主动关闭连接场景下的测试套件
+type CallCloseSuite struct {
+	suite.Suite
+	server     *Model              // 服务端物模型
+	mockOnCall *mockCallReqHandler // 调用请求模拟
+	tcpAddr    string              // tcp地址
+	wsAddr     string              // ws地址
+	args       message.Args        // 客户端的调用参数
+	rawArgs    message.RawArgs     // 服务端收到的调用参数
+	exeTime    time.Duration       // 方法执行事件
+	waitNum    int                 // 并行等待的数量
+	wg         sync.WaitGroup      // 等待客户端完成信号
+}
+
+func (closeSuite *CallCloseSuite) SetupSuite() {
+	closeSuite.tcpAddr = "localhost:51888"
+	closeSuite.wsAddr = "localhost:51999"
+	closeSuite.exeTime = time.Second * 4
+	closeSuite.args = message.Args{
+		"angle": 90,
+		"speed": "fast",
+	}
+	closeSuite.rawArgs = message.RawArgs{
+		"angle": []byte(`90`),
+		"speed": []byte(`"fast"`),
+	}
+	closeSuite.waitNum = 100
+
+	closeSuite.mockOnCall = new(mockCallReqHandler)
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	}, WithVerifyResp(), WithCallReqHandler(closeSuite.mockOnCall))
+	require.Nil(closeSuite.T(), err)
+
+	closeSuite.server = server
+
+	resp := message.Resp{
+		"res":  true,
+		"msg":  "执行成功",
+		"time": uint(90000),
+		"code": 0,
+	}
+
+	closeSuite.mockOnCall.
+		On("OnCallReq", "QS", closeSuite.rawArgs).
+		After(closeSuite.exeTime).
+		Return(resp).
+		Times(2)
+
+	go func() {
+		fmt.Printf("listen tcp@%s\n", closeSuite.tcpAddr)
+		err := server.ListenServeTCP(closeSuite.tcpAddr)
+		require.NotNil(closeSuite.T(), err)
+	}()
+
+	go func() {
+		fmt.Printf("listen ws@%s\n", closeSuite.wsAddr)
+		err := server.ListenServeWebSocket(closeSuite.wsAddr)
+		require.NotNil(closeSuite.T(), err)
+	}()
+
+	closeSuite.wg.Add(2)
+}
+
+func (closeSuite *CallCloseSuite) client(conn *Connection) {
+	waiter, err := conn.Invoke("A/car/#1/tpqs/QS", closeSuite.args)
+	closeSuite.Nil(err, "连接必须建立成功")
+
+	done := make(chan struct{}, closeSuite.waitNum*2)
+
+	waitFunc := func(waiter *RespWaiter) {
+		defer func() { done <- struct{}{} }()
+		resp, gotErr := waiter.Wait()
+		closeSuite.Require().Equal(errors.New("connection closed for: active close"), gotErr)
+		closeSuite.Assert().Equal(message.RawResp{}, resp)
+	}
+
+	waitForFunc := func(waiter *RespWaiter) {
+		defer func() { done <- struct{}{} }()
+		resp, gotErr := waiter.WaitFor(closeSuite.exeTime + time.Second)
+
+		closeSuite.Require().Equal(errors.New("connection closed for: active close"), gotErr)
+		closeSuite.Assert().Equal(message.RawResp{}, resp)
+	}
+
+	// 开启多个协程无限等待一个响应
+	var timeout time.Duration
+	for i := 0; i < closeSuite.waitNum; i++ {
+		go waitFunc(waiter)
+		go waitForFunc(waiter)
+		timeout += time.Second
+	}
+
+	// 方法执行到一半时间时关闭连接
+	time.Sleep(closeSuite.exeTime / 2)
+	_ = conn.Close()
+
+	// 等待回调函数执行完毕
+	for i := 0; i < closeSuite.waitNum*2; i++ {
+		select {
+		case <-done:
+		}
+	}
+}
+
+func (closeSuite *CallCloseSuite) TestServerSide() {
+	closeSuite.T().Parallel()
+
+	// 等待所有客户端都运行完了
+	closeSuite.wg.Wait()
+
+	// NOTE: 最后再断言调用请求回调
+	closeSuite.mockOnCall.AssertExpectations(closeSuite.T())
+}
+
+func (closeSuite *CallCloseSuite) TestTCPClient() {
+	defer closeSuite.wg.Done()
+
+	closeSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialTcp(closeSuite.tcpAddr, WithClosedFunc(func(reason string) {
+		closeSuite.Equal("active close", reason)
+	}))
+
+	require.Nil(closeSuite.T(), err)
+	require.NotNil(closeSuite.T(), conn)
+
+	closeSuite.client(conn)
+}
+
+func (closeSuite *CallCloseSuite) TestWSClient() {
+	defer closeSuite.wg.Done()
+
+	closeSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialWebSocket("ws://"+closeSuite.wsAddr, WithClosedFunc(func(reason string) {
+		closeSuite.Equal("active close", reason)
+	}))
+
+	require.Nil(closeSuite.T(), err)
+	require.NotNil(closeSuite.T(), conn)
+
+	closeSuite.client(conn)
+}
+
+// TestCallClose 测试真实环境下远程调用后主动关闭连接的场景
+func TestCallClose(t *testing.T) {
+	suite.Run(t, new(CallCloseSuite))
+}
