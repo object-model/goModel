@@ -2205,6 +2205,42 @@ func (c *CallSuite) TestWSClient() {
 	c.client(conn)
 }
 
+// 测试调用请求报文发送失败时Call的返回逻辑
+func (c *CallSuite) TestSendCallFailed() {
+	mockedConn := new(mockConn)
+
+	conn := newConn(c.server, mockedConn)
+	conn.uidCreator = func() string {
+		return "123"
+	}
+
+	callMsg := `{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123","args":{}}}`
+	mockedConn.On("WriteMsg", []byte(callMsg)).Return(io.EOF).Once()
+
+	resp, err := conn.Call("A/car/#1/tpqs/QS", nil)
+	assert.Equal(c.T(), message.RawResp{}, resp, "发送调用请求失败时---返回响应为空")
+	assert.Equal(c.T(), io.EOF, err, "发送调用请求失败时---返回的错误信息")
+
+	mockedConn.AssertExpectations(c.T())
+}
+
+// 测试员信息查询报文发送失败时GetPeerMeta的返回逻辑
+func (c *CallSuite) TestSendQueryMetaFailed() {
+	mockedConn := new(mockConn)
+
+	conn := newConn(c.server, mockedConn)
+
+	queryMsg := `{"type":"query-meta","payload":null}`
+	mockedConn.On("WriteMsg", []byte(queryMsg)).Return(io.EOF).Once()
+
+	peerMeta, err := conn.GetPeerMeta()
+
+	assert.Equal(c.T(), conn.peerMeta, peerMeta, "发送元信息查询报文失败时---返回的元信息")
+	assert.Equal(c.T(), io.EOF, err, "发送元信息查询报文失败时---返回的错误信息")
+
+	mockedConn.AssertExpectations(c.T())
+}
+
 // TestCall 测试真实环境下同步调用
 func TestCall(t *testing.T) {
 	suite.Run(t, new(CallSuite))
@@ -2466,6 +2502,25 @@ func (c *CallForSuite) TestWSClient() {
 	require.NotNil(c.T(), conn)
 
 	c.client(conn)
+}
+
+// 测试调用请求报文发送失败时CallFor的返回逻辑
+func (c *CallForSuite) TestSendCallFailed() {
+	mockedConn := new(mockConn)
+
+	conn := newConn(c.server, mockedConn)
+	conn.uidCreator = func() string {
+		return "123"
+	}
+
+	callMsg := `{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123","args":{}}}`
+	mockedConn.On("WriteMsg", []byte(callMsg)).Return(io.EOF).Once()
+
+	resp, err := conn.CallFor("A/car/#1/tpqs/QS", nil, time.Second)
+	assert.Equal(c.T(), message.RawResp{}, resp, "发送调用请求失败时---返回响应为空")
+	assert.Equal(c.T(), io.EOF, err, "发送调用请求失败时---返回的错误信息")
+
+	mockedConn.AssertExpectations(c.T())
 }
 
 // TestCallFor 测试真实环境下同步+超时调用

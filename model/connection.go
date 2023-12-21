@@ -340,7 +340,7 @@ func (conn *Connection) GetPeerMeta() (*meta.Meta, error) {
 	default:
 		err := conn.sendMsg(message.EncodeQueryMetaMsg())
 		if err != nil {
-			return conn.peerMeta, fmt.Errorf("send query-meta message failed")
+			return conn.peerMeta, err
 		}
 		<-conn.metaGotCh
 		return conn.peerMeta, conn.peerMetaErr
