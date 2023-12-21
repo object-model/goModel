@@ -92,6 +92,61 @@ type motor struct {
 	Temp int `json:"temp"`
 }
 
+// TestCallRequestFunc_OnCallReq 测试调用请求回调函数的逻辑
+func TestCallRequestFunc_OnCallReq(t *testing.T) {
+	wantName := "QS"
+	wantArgs := message.RawArgs{
+		"angle": []byte(`90`),
+		"speed": []byte(`superFast`),
+	}
+	wantResp := message.Resp{
+		"res":  true,
+		"msg":  "执行成功",
+		"time": uint(10000),
+		"code": 0,
+	}
+
+	var onCall CallRequestFunc = func(name string, args message.RawArgs) message.Resp {
+		assert.Equal(t, wantName, name, "name参数")
+		assert.Equal(t, wantArgs, args, "args参数")
+		return wantResp
+	}
+
+	got := onCall.OnCallReq(wantName, wantArgs)
+
+	assert.Equal(t, wantResp, got, "返回值")
+}
+
+// TestStateFunc_OnState 测试状态回调函数的逻辑
+func TestStateFunc_OnState(t *testing.T) {
+	wantModelName := "A/car/#1/tpqs"
+	wantStateName := "tpqsInfo"
+	wantData := []byte(`{"qsState":"erecting","hpSwitch":false,"qsAngle":90}`)
+
+	var onState StateFunc = func(modelName string, stateName string, data []byte) {
+		assert.Equal(t, wantModelName, modelName, "modelName参数")
+		assert.Equal(t, wantStateName, stateName, "stateName参数")
+		assert.Equal(t, wantData, data, "data参数")
+	}
+
+	onState.OnState(wantModelName, wantStateName, wantData)
+}
+
+// TestEventFunc_OnEvent 测试事件回调函数的逻辑
+func TestEventFunc_OnEvent(t *testing.T) {
+	wantModelName := "A/car/#1/tpqs"
+	wantEventName := "qsMotorOverCur"
+	wantArgs := message.RawArgs{}
+
+	var onEvent EventFunc = func(modelName string, eventName string, args message.RawArgs) {
+		assert.Equal(t, wantModelName, modelName, "modelName参数")
+		assert.Equal(t, wantEventName, eventName, "eventName参数")
+		assert.Equal(t, wantArgs, args, "args参数")
+	}
+
+	onEvent.OnEvent(wantModelName, wantEventName, wantArgs)
+}
+
 // TestWithVerifyResp 测试开启物模型的响应校验选项
 func TestWithVerifyResp(t *testing.T) {
 	m := &Model{}
