@@ -2247,6 +2247,8 @@ func TestCall(t *testing.T) {
 }
 
 // 同步加超时调用示例
+// NOTE: 不同用例的参数应该不相同, 否则会导致测试不同的奇怪行为!!!
+// NOTE: 原因是模拟的接口mockCallReqHandler无法识别出相同参数的调用的区别
 type callForSample struct {
 	args     message.Args    // 客户端的调用参数
 	callIsOn bool            // 服务端回调函数是否触发
@@ -2528,7 +2530,7 @@ func TestCallFor(t *testing.T) {
 	suite.Run(t, new(CallForSuite))
 }
 
-// 异步+超时调用示例
+// 异步+回调调用示例
 type invokeCallbackSample struct {
 	args     message.Args    // 客户端的调用参数
 	callIsOn bool            // 服务端回调函数是否触发
@@ -2539,7 +2541,7 @@ type invokeCallbackSample struct {
 	desc     string          // 用例描述
 }
 
-// InvokeCallbackSuite 为异步调用+回调调用测试套件
+// InvokeCallbackSuite 为异步+回调方式调用测试套件
 type InvokeCallbackSuite struct {
 	suite.Suite
 	server     *Model                 // 服务端物模型
@@ -2664,34 +2666,31 @@ func (callbackSuite *InvokeCallbackSuite) SetupSuite() {
 }
 
 func (callbackSuite *InvokeCallbackSuite) client(conn *Connection) {
-	wg := sync.WaitGroup{}
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
+	called := make(chan struct{}, len(callbackSuite.calls))
 
 	// 回调函数创建器
 	creatRespFunc := func(call invokeCallbackSample) RespFunc {
 		return func(resp message.RawResp, err error) {
-			defer wg.Done()
 			assert.Equal(callbackSuite.T(), call.rawResp, resp, "调用结果回调函数收到的响应", call.desc)
 			assert.Equal(callbackSuite.T(), call.err, err, "调用结果回调函数收到的错误信息", call.desc)
+			called <- struct{}{}
 		}
 	}
 
 	// 异步+回调调用方法
-	wg.Add(len(callbackSuite.calls))
 	for _, call := range callbackSuite.calls {
 		err := conn.InvokeByCallback("A/car/#1/tpqs/QS", call.args, creatRespFunc(call))
 		assert.Nil(callbackSuite.T(), err, call.desc)
 	}
 
 	// 确保所有回调函数执行了再退出
-	select {
-	case <-time.After(callbackSuite.timeOut):
-		callbackSuite.Fail("所有异步调用结果回调在规定时间内未执行完成")
-	case <-done:
+	timer := time.NewTimer(callbackSuite.timeOut)
+	for i := 0; i < len(callbackSuite.calls); i++ {
+		select {
+		case <-timer.C:
+			callbackSuite.Fail("所有异步调用结果回调在规定时间内未执行完成")
+		case <-called:
+		}
 	}
 }
 
@@ -2731,7 +2730,7 @@ func (callbackSuite *InvokeCallbackSuite) TestWSClient() {
 	callbackSuite.client(conn)
 }
 
-// 测试调用请求报文发送失败时CallFor的返回逻辑
+// 测试调用请求报文发送失败时 InvokeByCallback 的返回逻辑
 func (callbackSuite *InvokeCallbackSuite) TestSendCallFailed() {
 	mockedConn := new(mockConn)
 
@@ -2754,4 +2753,288 @@ func (callbackSuite *InvokeCallbackSuite) TestSendCallFailed() {
 // TestInvokeByCallback 测试真实环境下异步+回调调用
 func TestInvokeByCallback(t *testing.T) {
 	suite.Run(t, new(InvokeCallbackSuite))
+}
+
+// 异步+回调+超时 调用示例
+// NOTE: 不同用例的参数应该不相同, 否则会导致测试不同的奇怪行为!!!
+// NOTE: 原因是模拟的接口mockCallReqHandler无法识别出相同参数的调用的区别
+type invokeForSample struct {
+	args     message.Args    // 客户端的调用参数
+	callIsOn bool            // 服务端回调函数是否触发
+	rawArgs  message.RawArgs // 服务端收到的调用参数
+	exeTime  time.Duration   // 服务端调用请求处理函数执行时间
+	resp     message.Resp    // 服务端回调返回的响应值
+	waitTime time.Duration   // 客户端等待时间
+	rawResp  message.RawResp // 客户端回调收到的响应值
+	err      error           // 客户端回调收到错误信息
+	desc     string          // 用例描述
+}
+
+// InvokeForSuite 为异步+回调+超时方式调用测试套件
+type InvokeForSuite struct {
+	suite.Suite
+	server     *Model              // 服务端物模型
+	mockOnCall *mockCallReqHandler // 调用请求模拟
+	calls      []invokeForSample   // 异步+回调+超时调用示例
+	tcpAddr    string              // tcp地址
+	wsAddr     string              // ws地址
+	wg         sync.WaitGroup      // 等待客户端完成信号
+}
+
+func (invokeForSuite *InvokeForSuite) SetupSuite() {
+	invokeForSuite.tcpAddr = "localhost:58888"
+	invokeForSuite.wsAddr = "localhost:59999"
+
+	invokeForSuite.mockOnCall = new(mockCallReqHandler)
+	server, err := LoadFromFile("../meta/tpqs.json", meta.TemplateParam{
+		"group": "A",
+		"id":    "#1",
+	}, WithVerifyResp(), WithCallReqHandler(invokeForSuite.mockOnCall))
+	require.Nil(invokeForSuite.T(), err)
+
+	invokeForSuite.server = server
+
+	invokeForSuite.calls = []invokeForSample{
+		{
+			args: message.Args{
+				"angle": 90,
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("arg \"speed\": missing"),
+			desc:     "调用参数不符合元信息---调用参数缺失",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "unknown",
+			},
+			callIsOn: false,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second,
+			err:      errors.New("arg \"speed\": \"unknown\" NOT in option"),
+			desc:     "调用参数不符合元信息---调用参数不再可选项范围中",
+		},
+
+		{
+			args: message.Args{
+				"angle": 90,
+				"speed": "fast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`90`),
+				"speed": []byte(`"fast"`),
+			},
+			exeTime: 0,
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(90000),
+				"code": 0,
+			},
+			waitTime: time.Second,
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`90000`),
+				"code": []byte(`0`),
+			},
+			err:  nil,
+			desc: "执行成功---等待时间大于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 85,
+				"speed": "fast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`85`),
+				"speed": []byte(`"fast"`),
+			},
+			exeTime: time.Second * 2,
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(90000),
+				"code": 0,
+			},
+			waitTime: time.Second,
+			rawResp:  message.RawResp{},
+			err:      errors.New("timeout"),
+			desc:     "执行成功---等待时间小于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 40,
+				"speed": "superFast",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`40`),
+				"speed": []byte(`"superFast"`),
+			},
+			exeTime: time.Second,
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(45000),
+			},
+			rawResp: message.RawResp{
+				"res":  []byte(`true`),
+				"msg":  []byte(`"执行成功"`),
+				"time": []byte(`45000`),
+			},
+			waitTime: time.Second * 2,
+			err:      errors.New("response \"code\": missing"),
+			desc:     "回调函数返回值不符合元信息---等待时间大于执行时间",
+		},
+
+		{
+			args: message.Args{
+				"angle": 66,
+				"speed": "middle",
+			},
+			callIsOn: true,
+			rawArgs: message.RawArgs{
+				"angle": []byte(`66`),
+				"speed": []byte(`"middle"`),
+			},
+			resp: message.Resp{
+				"res":  true,
+				"msg":  "执行成功",
+				"time": uint(50000),
+			},
+			exeTime:  time.Second * 2,
+			rawResp:  message.RawResp{},
+			waitTime: time.Second * 1,
+			err:      errors.New("timeout"),
+			desc:     "回调函数返回值不符合元信息---等待时间小于执行时间",
+		},
+	}
+
+	for _, call := range invokeForSuite.calls {
+		if call.callIsOn {
+			invokeForSuite.mockOnCall.
+				On("OnCallReq", "QS", call.rawArgs).
+				After(call.exeTime).
+				Return(call.resp).
+				Times(2)
+		}
+	}
+
+	go func() {
+		fmt.Printf("listen tcp@%s\n", invokeForSuite.tcpAddr)
+		err := server.ListenServeTCP(invokeForSuite.tcpAddr)
+		require.NotNil(invokeForSuite.T(), err)
+	}()
+
+	go func() {
+		fmt.Printf("listen ws@%s\n", invokeForSuite.wsAddr)
+		err := server.ListenServeWebSocket(invokeForSuite.wsAddr)
+		require.NotNil(invokeForSuite.T(), err)
+	}()
+
+	invokeForSuite.wg.Add(2)
+}
+
+func (invokeForSuite *InvokeForSuite) client(conn *Connection) {
+	called := make(chan struct{}, len(invokeForSuite.calls))
+
+	// 回调函数创建器
+	creatRespFunc := func(call invokeForSample) RespFunc {
+		return func(resp message.RawResp, err error) {
+			assert.Equal(invokeForSuite.T(), call.rawResp, resp, "调用结果回调函数收到的响应", call.desc)
+			assert.Equal(invokeForSuite.T(), call.err, err, "调用结果回调函数收到的错误信息", call.desc)
+			called <- struct{}{}
+		}
+	}
+
+	// 所有响应回调函数总的执行时间限制
+	// = 所有调用请求的等待时间 waitTime 之和 + 1s
+	var timeout time.Duration
+
+	// 异步+回调+超时 调用方法
+	for _, call := range invokeForSuite.calls {
+		timeout += call.waitTime
+		err := conn.InvokeFor("A/car/#1/tpqs/QS", call.args, creatRespFunc(call), call.waitTime)
+		assert.Nil(invokeForSuite.T(), err, call.desc)
+	}
+	timeout += time.Second
+
+	// 确保所有回调函数执行了再退出
+	timer := time.NewTimer(timeout)
+	for i := 0; i < len(invokeForSuite.calls); i++ {
+		select {
+		case <-timer.C:
+			invokeForSuite.Fail("所有异步调用结果回调在规定时间内未执行完成")
+		case <-called:
+		}
+	}
+}
+
+func (invokeForSuite *InvokeForSuite) TestServerSide() {
+	invokeForSuite.T().Parallel()
+
+	// 等待所有客户端都运行完了
+	invokeForSuite.wg.Wait()
+
+	// NOTE: 最后再断言调用请求回调
+	invokeForSuite.mockOnCall.AssertExpectations(invokeForSuite.T())
+}
+
+func (invokeForSuite *InvokeForSuite) TestTCPClient() {
+	defer invokeForSuite.wg.Done()
+
+	invokeForSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialTcp(invokeForSuite.tcpAddr)
+
+	require.Nil(invokeForSuite.T(), err)
+	require.NotNil(invokeForSuite.T(), conn)
+
+	invokeForSuite.client(conn)
+}
+
+func (invokeForSuite *InvokeForSuite) TestWSClient() {
+	defer invokeForSuite.wg.Done()
+
+	invokeForSuite.T().Parallel()
+
+	conn, err := NewEmptyModel().DialWebSocket("ws://" + invokeForSuite.wsAddr)
+
+	require.Nil(invokeForSuite.T(), err)
+	require.NotNil(invokeForSuite.T(), conn)
+
+	invokeForSuite.client(conn)
+}
+
+// 测试调用请求报文发送失败时 InvokeByCallback 的返回逻辑
+func (invokeForSuite *InvokeForSuite) TestSendCallFailed() {
+	mockedConn := new(mockConn)
+
+	conn := newConn(invokeForSuite.server, mockedConn)
+	conn.uidCreator = func() string {
+		return "123"
+	}
+
+	callMsg := `{"type":"call","payload":{"name":"A/car/#1/tpqs/QS","uuid":"123","args":{}}}`
+	mockedConn.On("WriteMsg", []byte(callMsg)).Return(io.EOF).Once()
+
+	err := conn.InvokeFor("A/car/#1/tpqs/QS", nil, func(resp message.RawResp, err error) {
+		invokeForSuite.Fail("发送调用请求报文失败时回调函数不应当被触发")
+	}, time.Second)
+	assert.Equal(invokeForSuite.T(), io.EOF, err, "发送调用请求失败时---返回的错误信息")
+
+	mockedConn.AssertExpectations(invokeForSuite.T())
+}
+
+// TestInvokeFor 测试真实环境下异步+回调+超时的方式调用
+func TestInvokeFor(t *testing.T) {
+	suite.Run(t, new(InvokeForSuite))
 }
