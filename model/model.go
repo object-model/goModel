@@ -126,7 +126,7 @@ func (m *Model) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn)))
+		go m.dealConn(newConn(m, rawConn.NewTcpConn(conn, true)))
 	}
 }
 
@@ -138,7 +138,7 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 			return
 		}
 
-		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn)))
+		m.dealConn(newConn(m, rawConn.NewWebSocketConn(conn, true)))
 	})
 	return http.ListenAndServe(addr, mux)
 }
@@ -201,7 +201,7 @@ func (m *Model) DialTcp(addr string, opts ...ConnOption) (*Connection, error) {
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewTcpConn(raw), opts...)
+	ans := newConn(m, rawConn.NewTcpConn(raw, false), opts...)
 	go m.dealConn(ans)
 
 	return ans, nil
@@ -213,7 +213,7 @@ func (m *Model) DialWebSocket(addr string, opts ...ConnOption) (*Connection, err
 		return nil, err
 	}
 
-	ans := newConn(m, rawConn.NewWebSocketConn(raw), opts...)
+	ans := newConn(m, rawConn.NewWebSocketConn(raw, false), opts...)
 	go m.dealConn(ans)
 
 	return ans, nil

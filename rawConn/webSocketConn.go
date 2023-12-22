@@ -44,10 +44,14 @@ func (conn *webSocketConn) writePing() error {
 	return conn.WriteMessage(websocket.PingMessage, nil)
 }
 
-func NewWebSocketConn(conn *websocket.Conn) RawConn {
+func NewWebSocketConn(conn *websocket.Conn, ping bool) RawConn {
 	ans := &webSocketConn{
 		writeMu: sync.Mutex{},
 		Conn:    conn,
+	}
+
+	if !ping {
+		return ans
 	}
 
 	_ = conn.SetReadDeadline(time.Now().Add(pongWait))

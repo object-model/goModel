@@ -103,7 +103,7 @@ func (s *Server) ListenServeTCP(addr string) error {
 			return err
 		}
 
-		go s.addModelConnection(rawConn.NewTcpConn(conn))
+		go s.addModelConnection(rawConn.NewTcpConn(conn, true))
 	}
 }
 
@@ -115,7 +115,7 @@ func (s *Server) ListenServeWebSocket(addr string) error {
 		if err != nil {
 			return
 		}
-		s.addModelConnection(rawConn.NewWebSocketConn(conn))
+		s.addModelConnection(rawConn.NewWebSocketConn(conn, true))
 	})
 	return http.ListenAndServe(addr, nil)
 }

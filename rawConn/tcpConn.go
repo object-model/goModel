@@ -41,9 +41,11 @@ func (conn *tcpConn) WriteMsg(msg []byte) error {
 	return err
 }
 
-func NewTcpConn(rawConn *net.TCPConn) RawConn {
-	_ = rawConn.SetKeepAlive(true)
-	_ = rawConn.SetKeepAlivePeriod(time.Second * 5)
+func NewTcpConn(rawConn *net.TCPConn, keepAlive bool) RawConn {
+	if keepAlive {
+		_ = rawConn.SetKeepAlive(true)
+		_ = rawConn.SetKeepAlivePeriod(time.Second * 5)
+	}
 	return &tcpConn{
 		rawConn,
 	}
