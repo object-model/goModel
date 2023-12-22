@@ -92,6 +92,23 @@ Proxy is object model proxy server which can transmit model message and also pro
         },
 
         {
+            "name": "closed",
+            "description": "连接关闭事件",
+            "args": [
+                {
+                    "name": "addr",
+                    "description": "IP地址:端口号",
+                    "type": "string"
+                },
+                {
+                    "name": "reason",
+                    "description": "关闭原因",
+                    "type": "string"
+                }
+            ]
+        },
+
+        {
             "name": "metaCheckError",
             "description": "物模型元信息校验错误事件",
             "args": [
@@ -336,6 +353,13 @@ Proxy is object model proxy server which can transmit model message and also pro
 - **作用：**通知感兴趣的物模型，代理服务从其管理的物模型中删除了某个物模型
 - **触发时机：**当被代理服务管理的物模型由于某种原因需要断开连接时，代理会删除此物模型，同时触发该事件
 - **参数：**删除的物模型名称、地址信息
+
+### 连接关闭事件
+
+- **事件名：**`proxy/closed`
+- **作用：**通知感兴趣的物模型，物模型连接已经关闭
+- **触发时机：**当连接与代理服务由于某种原因断开连接时，会触发该事件
+- **参数：**连接的地址信息和断开原因
 
 ### 物模型元信息校验错误事件
 

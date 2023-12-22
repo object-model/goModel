@@ -20,7 +20,6 @@ type msg struct {
 }
 
 type stateOrEventMessage struct {
-	Source   string // 发送者的物模型名称
 	Name     string // 状态或者事件名称
 	FullData []byte // 全报文原始数据，是Message类型序列化的结果
 }
@@ -73,6 +72,7 @@ type model struct {
 	bufferDone      chan struct{}                 // 挂起报文处理完成信号
 	bufferErr       chan struct{}                 // 挂起报文处理出错信号
 	bufferExit      chan struct{}                 // bufferMsgHandler 退出信号
+	closeReason     string                        // 连接关闭原因
 }
 
 func (m *model) Close() error {
@@ -137,6 +137,9 @@ func (m *model) reader() {
 		// NOTE: 否则，会导致提前删除了m, 进一步导致可能出现访问无效内存
 		<-m.bufferExit
 
+		// 推送连接关闭事件
+		m.notifyClosed()
+
 		// 通过Server退出writer
 		m.removeConnCh <- m
 	}()
@@ -144,6 +147,7 @@ func (m *model) reader() {
 		// 读取报文
 		data, err := m.ReadMsg()
 		if err != nil {
+			m.closeReason = err.Error()
 			break
 		}
 
@@ -157,13 +161,30 @@ func (m *model) reader() {
 		// 解析JSON报文
 		msg := message.RawMessage{}
 		if err = jsoniter.Unmarshal(data, &msg); err != nil {
+			m.closeReason = err.Error()
 			break
 		}
 
 		// 处理包
 		if err = m.dealMsg(msg.Type, msg.Payload, data); err != nil {
+			m.closeReason = err.Error()
 			break
 		}
+	}
+}
+
+func (m *model) notifyClosed() {
+	fullData := message.Must(message.EncodeEventMsg("proxy/closed", message.Args{
+		"addr":   m.RemoteAddr().String(),
+		"reason": m.closeReason,
+	}))
+
+	// 无论m是否订阅closed事件都主动推送
+	m.writeChan <- fullData
+
+	m.eventBroadcast <- stateOrEventMessage{
+		Name:     "proxy/closed",
+		FullData: fullData,
 	}
 }
 
@@ -322,8 +343,17 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 		return err
 	}
 
+	// name字段为空或不存在
+	if strings.TrimSpace(state.Name) == "" {
+		return errors.New("name NOT exist or empty")
+	}
+
+	// data字段为null或不存在
+	if state.Data == nil {
+		return errors.New("data NOT exist or null")
+	}
+
 	m.stateBroadcast <- stateOrEventMessage{
-		Source:   m.MetaInfo.Name,
 		Name:     state.Name,
 		FullData: fullData,
 	}
@@ -336,8 +366,17 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 		return err
 	}
 
+	// name字段为空或不存在
+	if strings.TrimSpace(event.Name) == "" {
+		return errors.New("name NOT exist or empty")
+	}
+
+	// args字段为null或不存在
+	if event.Args == nil {
+		return errors.New("args NOT exist or null")
+	}
+
 	m.eventBroadcast <- stateOrEventMessage{
-		Source:   m.MetaInfo.Name,
 		Name:     event.Name,
 		FullData: fullData,
 	}
@@ -350,10 +389,21 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		return err
 	}
 
+	// uuid字段为空或不存在
+	if strings.TrimSpace(call.UUID) == "" {
+		return errors.New("uuid NOT exist or empty")
+	}
+
+	// args字段不存在或为空
+	if call.Args == nil {
+		errStr := "args NOT exist or empty"
+		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, errStr, message.Resp{}))
+		return nil
+	}
+
 	modelName, methodName, err := splitModelName(call.Name)
 	if err != nil {
-		resp := make(map[string]interface{})
-		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, err.Error(), resp))
+		m.writeChan <- message.Must(message.EncodeRespMsg(call.UUID, err.Error(), message.Resp{}))
 		return nil
 	}
 
@@ -372,6 +422,11 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 	var resp message.ResponsePayload
 	if err := jsoniter.Unmarshal(payload, &resp); err != nil {
 		return err
+	}
+
+	// uuid字段为空或不存在
+	if strings.TrimSpace(resp.UUID) == "" {
+		return errors.New("uuid NOT exist or empty")
 	}
 
 	m.respChan <- responseMessage{
@@ -403,11 +458,11 @@ func splitModelName(fullName string) (string, string, error) {
 		return "", "", fmt.Errorf("%q missing '/'", fullName)
 	}
 
-	if strings.Trim(fullName[:index], " \t\n\r\f\v") == "" {
+	if strings.TrimSpace(fullName[:index]) == "" {
 		return "", "", fmt.Errorf("no model name in %q", fullName)
 	}
 
-	if strings.Trim(fullName[index+1:], " \t\n\n\f\v") == "" {
+	if strings.TrimSpace(fullName[index+1:]) == "" {
 		return "", "", fmt.Errorf("no method name in %q", fullName)
 	}
 

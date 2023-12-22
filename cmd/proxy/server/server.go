@@ -392,7 +392,6 @@ func (s *Server) addModelConnection(conn rawConn.RawConn) {
 	// 元信息校验不通过则不添加, 并退出
 	if GotMeta, err := meta.Parse(ans.MetaRaw, nil); err != nil {
 		s.pushMetaCheckErrorEvent(err, ans)
-		_ = ans.Close()
 		return
 	} else {
 		ans.MetaInfo = GotMeta
