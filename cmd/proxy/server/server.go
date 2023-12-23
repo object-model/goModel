@@ -365,17 +365,12 @@ func (s *Server) addModelConnection(conn rawConn.RawConn) {
 		subEventChan:   s.subEventChan,
 		writeChan:      make(chan []byte, 256),
 		writerQuit:     make(chan struct{}),
-		bufferQuit:     make(chan struct{}),
 		added:          make(chan struct{}),
 		metaGotChan:    make(chan struct{}),
 		log:            s.log,
-		buffer:         make(chan msg, 256),
-		bufferDone:     make(chan struct{}),
-		bufferErr:      make(chan struct{}),
-		bufferExit:     make(chan struct{}),
+		buffer:         make([]msgPack, 0, 256),
 	}
 
-	go ans.bufferMsgHandler()
 	go ans.writer()
 	go ans.reader()
 
