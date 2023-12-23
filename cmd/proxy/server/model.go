@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-type msg struct {
-	msgType  string
+type msgPack struct {
+	Type     string
 	payload  []byte
 	fullData []byte
 }
@@ -47,7 +47,6 @@ type subStateOrEventMessage struct {
 
 type model struct {
 	rawConn.RawConn                               // 原始连接
-	bufferQuit      chan struct{}                 // 退出 bufferMsgHandler 的信号
 	writerQuit      chan struct{}                 // 退出 writer 的信号
 	added           chan struct{}                 // 连接已经加入 Server 信号
 	removeConnCh    chan<- *model                 // 删除连接通道
@@ -61,30 +60,13 @@ type model struct {
 	metaGotChan     chan struct{}                 // 收到元信息消息通道
 	queryOnce       sync.Once                     // 保证只查询一次元信息
 	onGetMetaOnce   sync.Once                     // 保证只响应一次元信息结果报文
-	bufferQuitOnce  sync.Once                     // 保证 bufferQuit 只关闭一次
 	quitWriterOnce  sync.Once                     // 保证 writerQuit 只关闭一次
 	addedOnce       sync.Once                     // 保证 added 只关闭一次
 	MetaInfo        *meta.Meta                    // 元信息
 	MetaRaw         []byte                        // 原始的元信息
 	log             *log.Logger                   // 记录收发数据
-	bufferCloseOnce sync.Once                     // 保证buffer仅关闭一次
-	buffer          chan msg                      // 挂起的报文
-	bufferDone      chan struct{}                 // 挂起报文处理完成信号
-	bufferErr       chan struct{}                 // 挂起报文处理出错信号
-	bufferExit      chan struct{}                 // bufferMsgHandler 退出信号
+	buffer          []msgPack                     // 挂起的报文
 	closeReason     string                        // 连接关闭原因
-}
-
-func (m *model) Close() error {
-	// 保证在未添加的情况下, 退出 bufferMsgHandler
-	m.bufferQuitOnce.Do(func() {
-		close(m.bufferQuit)
-	})
-	// 保证在已添加的情况下, 退出 bufferMsgHandler
-	m.bufferCloseOnce.Do(func() {
-		close(m.buffer)
-	})
-	return m.RawConn.Close()
 }
 
 func (m *model) quitWriter() {
@@ -125,18 +107,6 @@ func (m *model) queryMeta(timeout time.Duration) error {
 
 func (m *model) reader() {
 	defer func() {
-		// NOTE: 主动关闭，保证 bufferMsgHandler 一定能退出
-		m.bufferQuitOnce.Do(func() {
-			close(m.bufferQuit)
-		})
-		m.bufferCloseOnce.Do(func() {
-			close(m.buffer)
-		})
-
-		// NOTE: 必须等待 bufferMsgHandler 完全退出了
-		// NOTE: 否则，会导致提前删除了m, 进一步导致可能出现访问无效内存
-		<-m.bufferExit
-
 		// 推送连接关闭事件
 		m.notifyClosed()
 
@@ -206,22 +176,6 @@ func (m *model) writer() {
 	}
 }
 
-func (m *model) bufferMsgHandler() {
-	defer close(m.bufferExit)
-	select {
-	case <-m.added:
-		for msg := range m.buffer {
-			err := m.dealTransMsg(msg.msgType, msg.payload, msg.fullData)
-			if err != nil {
-				close(m.bufferErr)
-				return
-			}
-		}
-		close(m.bufferDone)
-	case <-m.bufferQuit:
-	}
-}
-
 func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 	switch msgType {
 	// NOTE: 所有需要处理或者转发的报文都需要等待代理完成添加,
@@ -234,25 +188,19 @@ func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
 		"state", "event", "call", "response":
 		select {
 		case <-m.added:
-			m.bufferCloseOnce.Do(func() {
-				close(m.buffer)
-			})
-			select {
-			case <-m.bufferDone:
-				return m.dealTransMsg(msgType, payload, fullData)
-			case <-m.bufferErr:
-				return errors.New("buffered message error")
+			for len(m.buffer) > 0 {
+				if err := m.dealTransMsg(msgType, payload, fullData); err != nil {
+					return err
+				}
+				m.buffer = m.buffer[1:]
 			}
+			return m.dealTransMsg(msgType, payload, fullData)
 		default:
-			select {
-			case m.buffer <- msg{
-				msgType:  msgType,
+			m.buffer = append(m.buffer, msgPack{
+				Type:     msgType,
 				payload:  payload,
 				fullData: fullData,
-			}:
-			default:
-				return errors.New("to much cached message")
-			}
+			})
 		}
 	case "query-meta":
 		return m.onQueryMeta()
