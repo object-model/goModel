@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"github.com/gorilla/websocket"
 	"goModel/message"
 	"goModel/meta"
@@ -189,6 +190,25 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	}
 
 	return nil
+}
+
+func (m *Model) Dial(addr string, opts ...ConnOption) (*Connection, error) {
+	i := strings.Index(addr, "@")
+	if i == -1 {
+		return nil, fmt.Errorf("%s missing /", addr)
+	}
+
+	network := addr[:i]
+	_addr_ := addr[i+1:]
+
+	switch network {
+	case "ws", "wss":
+		return m.DialWebSocket(network+"://"+_addr_, opts...)
+	case "tcp":
+		return m.DialTcp(_addr_, opts...)
+	}
+
+	return nil, fmt.Errorf("network %q is NOT supported", network)
 }
 
 func (m *Model) DialTcp(addr string, opts ...ConnOption) (*Connection, error) {
