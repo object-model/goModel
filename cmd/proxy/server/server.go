@@ -367,6 +367,7 @@ func (s *Server) addModelConnection(conn rawConn.RawConn) {
 		writerQuit:     make(chan struct{}),
 		added:          make(chan struct{}),
 		metaGotChan:    make(chan struct{}),
+		MetaInfo:       meta.NewEmptyMeta(),
 		log:            s.log,
 		buffer:         make([]msgPack, 0, 256),
 	}
