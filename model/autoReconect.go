@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
-// OnReConnect 为重连回调函数, 参数num为重连次数,
+// OnReConnect 为重连回调函数, 参数cancel用于取消重连 ,参数num为重连次数,
 // 参数ok为是否重连成功. OnReConnect 在每次发生重连事件后调用.
-type OnReConnect func(num uint, ok bool)
+// 调用 cancel 可以取消自动重连.
+type OnReConnect func(cancel func(), num uint, ok bool)
 
 // AutoConnector 为自动重连连接,当连接意外断开后会自动恢复连接,并在连接恢复时,状态和事件订阅关系也会一并恢复.
 // AutoConnector 和 Connection 具有相同的外部接口,
@@ -27,7 +28,6 @@ type AutoConnector struct {
 	forever     bool                // 是否永久重连 (仅在首次连接成功后有效)
 	maxTryNum   uint                // 最大重连次数
 	onReconnect OnReConnect         // 重连回调函数
-	onStop      func()              // 停止重连回调
 	connOptions []ConnOption        // 连接选项
 }
 
@@ -51,15 +51,6 @@ func WithMaxTryNum(maxTryNum uint) AutoConnectorOption {
 func WithForever() AutoConnectorOption {
 	return func(a *AutoConnector) {
 		a.forever = true
-	}
-}
-
-// WithOnStop 配置停止重连回调, 自动重连对象停止重连时会触发该回调.
-func WithOnStop(onStop func()) AutoConnectorOption {
-	return func(a *AutoConnector) {
-		if onStop != nil {
-			a.onStop = onStop
-		}
 	}
 }
 
@@ -96,8 +87,7 @@ func NewAutoConnector(m *Model, addr string, options ...AutoConnectorOption) *Au
 		addr:        addr,
 		forever:     false,
 		maxTryNum:   5,
-		onStop:      func() {},
-		onReconnect: func(uint, bool) {},
+		onReconnect: func(func(), uint, bool) {},
 		connOptions: make([]ConnOption, 0, 4),
 	}
 
@@ -110,6 +100,13 @@ func NewAutoConnector(m *Model, addr string, options ...AutoConnectorOption) *Au
 	ans.setConn(ans.reconnect())
 
 	return ans
+}
+
+// Valid 返回连接是否有效
+func (a *AutoConnector) Valid() bool {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	return a.Connection != nil
 }
 
 // SubState 通过建立的连接订阅状态, 若连接未建立或未恢复, 返回错误信息.
@@ -274,7 +271,7 @@ func (a *AutoConnector) GetPeerMeta() (*meta.Meta, error) {
 	return a.Connection.GetPeerMeta()
 }
 
-// Close 关闭自动重连并关闭建立的连接.
+// Close 并关闭建立的连接并停止自动重连.
 func (a *AutoConnector) Close() error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -304,7 +301,11 @@ func (a *AutoConnector) reconnect() *Connection {
 	for i := uint(0); !a.isExit(); {
 		i++
 		conn, err := a.m.Dial(a.addr, a.connOptions...)
-		a.onReconnect(i, err == nil)
+		a.onReconnect(func() {
+			a.exitOnce.Do(func() {
+				close(a.exit)
+			})
+		}, i, err == nil)
 		if err == nil {
 			return conn
 		}
@@ -316,14 +317,13 @@ func (a *AutoConnector) reconnect() *Connection {
 			break
 		}
 	}
-	a.onStop()
 	return nil
 }
 
 func (a *AutoConnector) setConn(connection *Connection) {
 	a.mutex.Lock()
 	a.Connection = connection
-	if connection == nil {
+	if connection != nil {
 		// 连接建立成功要恢复之前状态和事件订阅
 		_ = a.Connection.SubEvent(set2slice(a.subEvents))
 		_ = a.Connection.SubState(set2slice(a.subStates))
