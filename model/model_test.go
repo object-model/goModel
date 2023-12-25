@@ -2239,7 +2239,7 @@ func (c *CallSuite) TestTCPClient() {
 
 	c.T().Parallel()
 
-	conn, err := NewEmptyModel().DialTcp(c.tcpAddr)
+	conn, err := NewEmptyModel().Dial("tcp@" + c.tcpAddr)
 
 	require.Nil(c.T(), err)
 	require.NotNil(c.T(), conn)
@@ -2252,7 +2252,7 @@ func (c *CallSuite) TestWSClient() {
 
 	c.T().Parallel()
 
-	conn, err := NewEmptyModel().DialWebSocket("ws://" + c.wsAddr)
+	conn, err := NewEmptyModel().Dial("ws@" + c.wsAddr)
 
 	require.Nil(c.T(), err)
 	require.NotNil(c.T(), conn)
@@ -2540,7 +2540,7 @@ func (c *CallForSuite) TestTCPClient() {
 
 	c.T().Parallel()
 
-	conn, err := NewEmptyModel().DialTcp(c.tcpAddr)
+	conn, err := NewEmptyModel().Dial("tcp@" + c.tcpAddr)
 
 	require.Nil(c.T(), err)
 	require.NotNil(c.T(), conn)
@@ -2553,7 +2553,7 @@ func (c *CallForSuite) TestWSClient() {
 
 	c.T().Parallel()
 
-	conn, err := NewEmptyModel().DialWebSocket("ws://" + c.wsAddr)
+	conn, err := NewEmptyModel().Dial("ws@" + c.wsAddr)
 
 	require.Nil(c.T(), err)
 	require.NotNil(c.T(), conn)
@@ -2764,7 +2764,7 @@ func (callbackSuite *InvokeCallbackSuite) TestTCPClient() {
 
 	callbackSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialTcp(callbackSuite.tcpAddr)
+	conn, err := NewEmptyModel().Dial("tcp@" + callbackSuite.tcpAddr)
 
 	require.Nil(callbackSuite.T(), err)
 	require.NotNil(callbackSuite.T(), conn)
@@ -2777,7 +2777,7 @@ func (callbackSuite *InvokeCallbackSuite) TestWSClient() {
 
 	callbackSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialWebSocket("ws://" + callbackSuite.wsAddr)
+	conn, err := NewEmptyModel().Dial("ws@" + callbackSuite.wsAddr)
 
 	require.Nil(callbackSuite.T(), err)
 	require.NotNil(callbackSuite.T(), conn)
@@ -3048,7 +3048,7 @@ func (invokeForSuite *InvokeForSuite) TestTCPClient() {
 
 	invokeForSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialTcp(invokeForSuite.tcpAddr)
+	conn, err := NewEmptyModel().Dial("tcp@" + invokeForSuite.tcpAddr)
 
 	require.Nil(invokeForSuite.T(), err)
 	require.NotNil(invokeForSuite.T(), conn)
@@ -3061,7 +3061,7 @@ func (invokeForSuite *InvokeForSuite) TestWSClient() {
 
 	invokeForSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialWebSocket("ws://" + invokeForSuite.wsAddr)
+	conn, err := NewEmptyModel().Dial("ws@" + invokeForSuite.wsAddr)
 
 	require.Nil(invokeForSuite.T(), err)
 	require.NotNil(invokeForSuite.T(), conn)
@@ -3210,7 +3210,7 @@ func (closeSuite *CallCloseSuite) TestTCPClient() {
 
 	closeSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialTcp(closeSuite.tcpAddr, WithClosedFunc(func(reason string) {
+	conn, err := NewEmptyModel().Dial("tcp@"+closeSuite.tcpAddr, WithClosedFunc(func(reason string) {
 		require.Equal(closeSuite.T(), "active close", reason)
 	}))
 
@@ -3225,7 +3225,7 @@ func (closeSuite *CallCloseSuite) TestWSClient() {
 
 	closeSuite.T().Parallel()
 
-	conn, err := NewEmptyModel().DialWebSocket("ws://"+closeSuite.wsAddr, WithClosedFunc(func(reason string) {
+	conn, err := NewEmptyModel().Dial("ws@"+closeSuite.wsAddr, WithClosedFunc(func(reason string) {
 		require.Equal(closeSuite.T(), "active close", reason)
 	}))
 
