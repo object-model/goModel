@@ -202,7 +202,7 @@ func (m *Model) Dial(addr string, opts ...ConnOption) (*Connection, error) {
 	_addr_ := addr[i+1:]
 
 	switch network {
-	case "ws", "wss":
+	case "ws":
 		return m.DialWebSocket(network+"://"+_addr_, opts...)
 	case "tcp":
 		return m.DialTcp(_addr_, opts...)
