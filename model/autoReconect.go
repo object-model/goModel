@@ -12,13 +12,16 @@ import (
 // 参数ok为是否重连成功. OnReConnect 在每次发生重连事件后调用.
 type OnReConnect func(num uint, ok bool)
 
+// AutoConnector 为自动重连连接,当连接意外断开后会自动恢复连接,并在连接恢复时,状态和事件订阅关系也会一并恢复.
+// AutoConnector 和 Connection 具有相同的外部接口,
+// 都可以订阅状态和事件、注册状态和事件回调、远程调用方法、查询对端元信息, 唯一的区别是 AutoConnector 具有自动重连功能.
 type AutoConnector struct {
 	*Connection                     // 连接
 	mutex       sync.RWMutex        // 保护 conn, subStates, subEvents
 	subStates   map[string]struct{} // 订阅的状态列表
 	subEvents   map[string]struct{} // 订阅的事件列表
 	exitOnce    sync.Once           // 保证仅退出重连一次
-	exit        chan struct{}       // 是否退出重连
+	exit        chan struct{}       // 退出重连信号
 	m           *Model              // 物模型
 	addr        string              // 连接的对端地址
 	forever     bool                // 是否永久重连 (仅在首次连接成功后有效)
@@ -51,6 +54,7 @@ func WithForever() AutoConnectorOption {
 	}
 }
 
+// WithOnStop 配置停止重连回调, 自动重连对象停止重连时会触发该回调.
 func WithOnStop(onStop func()) AutoConnectorOption {
 	return func(a *AutoConnector) {
 		if onStop != nil {
@@ -108,6 +112,7 @@ func NewAutoConnector(m *Model, addr string, options ...AutoConnectorOption) *Au
 	return ans
 }
 
+// SubState 通过建立的连接订阅状态, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) SubState(states []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -121,6 +126,7 @@ func (a *AutoConnector) SubState(states []string) error {
 	return a.Connection.SubState(states)
 }
 
+// AddSubState 通过建立的连接添加状态订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) AddSubState(states []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -133,6 +139,7 @@ func (a *AutoConnector) AddSubState(states []string) error {
 	return a.Connection.AddSubState(states)
 }
 
+// CancelSubState 通过建立的连接取消状态订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) CancelSubState(states []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -145,6 +152,7 @@ func (a *AutoConnector) CancelSubState(states []string) error {
 	return a.Connection.CancelSubState(states)
 }
 
+// CancelAllSubState 通过建立的连接取消所有状态订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) CancelAllSubState() error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -155,6 +163,7 @@ func (a *AutoConnector) CancelAllSubState() error {
 	return a.Connection.CancelAllSubState()
 }
 
+// SubEvent 通过建立的连接订阅事件, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) SubEvent(events []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -168,6 +177,7 @@ func (a *AutoConnector) SubEvent(events []string) error {
 	return a.Connection.SubEvent(events)
 }
 
+// AddSubEvent 通过建立的连接添加事件订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) AddSubEvent(events []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -180,6 +190,7 @@ func (a *AutoConnector) AddSubEvent(events []string) error {
 	return a.Connection.AddSubEvent(events)
 }
 
+// CancelSubEvent 通过建立的连接取消事件订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) CancelSubEvent(events []string) error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -192,6 +203,7 @@ func (a *AutoConnector) CancelSubEvent(events []string) error {
 	return a.Connection.CancelSubEvent(events)
 }
 
+// CancelAllSubEvent 通过建立的连接取消所有事件订阅, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) CancelAllSubEvent() error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
@@ -202,6 +214,7 @@ func (a *AutoConnector) CancelAllSubEvent() error {
 	return a.Connection.CancelAllSubEvent()
 }
 
+// Invoke 通过建立的连接异步调用方法, 若连接未建立或未恢复, 返回值为nil的等待器和错误信息.
 func (a *AutoConnector) Invoke(fullName string, args message.Args) (*RespWaiter, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -211,6 +224,7 @@ func (a *AutoConnector) Invoke(fullName string, args message.Args) (*RespWaiter,
 	return a.Connection.Invoke(fullName, args)
 }
 
+// InvokeByCallback 通过建立的连接以回调的方式异步调用方法, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) InvokeByCallback(fullName string, args message.Args, onResp RespFunc) error {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -220,6 +234,7 @@ func (a *AutoConnector) InvokeByCallback(fullName string, args message.Args, onR
 	return a.Connection.InvokeByCallback(fullName, args, onResp)
 }
 
+// InvokeFor 通过建立的连接以回调+超时的方式异步调用方法, 若连接未建立或未恢复, 返回错误信息.
 func (a *AutoConnector) InvokeFor(fullName string, args message.Args, onResp RespFunc, timeout time.Duration) error {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -229,6 +244,7 @@ func (a *AutoConnector) InvokeFor(fullName string, args message.Args, onResp Res
 	return a.Connection.InvokeFor(fullName, args, onResp, timeout)
 }
 
+// Call 通过建立的连接同步调用方法, 若连接未建立或未恢复, 返回空响应和错误信息.
 func (a *AutoConnector) Call(fullName string, args message.Args) (message.RawResp, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -238,15 +254,7 @@ func (a *AutoConnector) Call(fullName string, args message.Args) (message.RawRes
 	return a.Connection.Call(fullName, args)
 }
 
-func (a *AutoConnector) GetPeerMeta() (*meta.Meta, error) {
-	a.mutex.RLock()
-	defer a.mutex.RUnlock()
-	if a.Connection == nil {
-		return meta.NewEmptyMeta(), errors.New("nil connection")
-	}
-	return a.Connection.GetPeerMeta()
-}
-
+// CallFor 通过建立的连接以超时的方式同步调用方法, 若连接未建立或未恢复, 返回空响应和错误信息.
 func (a *AutoConnector) CallFor(fullName string, args message.Args, timeout time.Duration) (message.RawResp, error) {
 	a.mutex.RLock()
 	defer a.mutex.RUnlock()
@@ -256,6 +264,17 @@ func (a *AutoConnector) CallFor(fullName string, args message.Args, timeout time
 	return a.Connection.CallFor(fullName, args, timeout)
 }
 
+// GetPeerMeta 通过建立的连接获取对端元信息, 若连接未建立或未恢复, 返回空元信息和错误信息.
+func (a *AutoConnector) GetPeerMeta() (*meta.Meta, error) {
+	a.mutex.RLock()
+	defer a.mutex.RUnlock()
+	if a.Connection == nil {
+		return meta.NewEmptyMeta(), errors.New("nil connection")
+	}
+	return a.Connection.GetPeerMeta()
+}
+
+// Close 关闭自动重连并关闭建立的连接.
 func (a *AutoConnector) Close() error {
 	a.mutex.Lock()
 	defer a.mutex.Unlock()
