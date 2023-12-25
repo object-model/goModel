@@ -3239,3 +3239,72 @@ func (closeSuite *CallCloseSuite) TestWSClient() {
 func TestCallClose(t *testing.T) {
 	suite.Run(t, new(CallCloseSuite))
 }
+
+// TestModel_DialFailed 测试建立连接失败的情况
+func TestModel_DialFailed(t *testing.T) {
+	m := NewEmptyModel()
+
+	type TestCase struct {
+		addr    string // 连接地址
+		wantErr error  // 期望的错误信息, 为nil时不需要判断实际错误信息的具体值
+		desc    string // 用例描述
+	}
+
+	testCases := []TestCase{
+		{
+			addr:    "localhost:8080",
+			wantErr: fmt.Errorf("%q missing @", "localhost:8080"),
+			desc:    "地址格式不正确---缺失@",
+		},
+
+		{
+			addr:    "unix@/tmp/model.sock",
+			wantErr: fmt.Errorf("network %q is NOT supported", "unix"),
+			desc:    "不支持的协议",
+		},
+
+		{
+			addr: "tcp@localhost::8080",
+			desc: "非法的tcp地址",
+		},
+
+		{
+			addr: "tcp@",
+			desc: "空的tcp地址",
+		},
+
+		{
+			addr: "tcp@localhost:unknown",
+			desc: "无效的tcp端口号",
+		},
+
+		{
+			addr: "tcp@localhost:0",
+			desc: "建立tcp连接失败",
+		},
+
+		{
+			addr: "ws@",
+			desc: "空的ws地址",
+		},
+
+		{
+			addr: "ws@localhost:unknown",
+			desc: "无效的ws端口号",
+		},
+
+		{
+			addr: "ws@localhost:0",
+			desc: "建立ws连接失败",
+		},
+	}
+
+	for _, test := range testCases {
+		conn, err := m.Dial(test.addr)
+		require.Nil(t, conn)
+		require.NotNil(t, err)
+		if test.wantErr != nil {
+			assert.Equal(t, test.wantErr, err)
+		}
+	}
+}

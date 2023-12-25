@@ -195,7 +195,7 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 func (m *Model) Dial(addr string, opts ...ConnOption) (*Connection, error) {
 	i := strings.Index(addr, "@")
 	if i == -1 {
-		return nil, fmt.Errorf("%s missing /", addr)
+		return nil, fmt.Errorf("%q missing @", addr)
 	}
 
 	network := addr[:i]
