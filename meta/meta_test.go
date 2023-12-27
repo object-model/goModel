@@ -3,8 +3,8 @@ package meta
 import (
 	"errors"
 	jsoniter "github.com/json-iterator/go"
+	"github.com/object-model/goModel/message"
 	"github.com/stretchr/testify/assert"
-	"goModel/message"
 	"io/ioutil"
 	"testing"
 )

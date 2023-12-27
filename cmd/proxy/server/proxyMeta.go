@@ -2,7 +2,7 @@ package server
 
 import (
 	jsoniter "github.com/json-iterator/go"
-	"goModel/message"
+	"github.com/object-model/goModel/message"
 	"strings"
 )
 

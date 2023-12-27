@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"goModel/cmd/proxy/server"
+	"github.com/object-model/goModel/cmd/proxy/server"
 	"io"
 	"log"
 	"os"

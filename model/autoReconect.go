@@ -2,8 +2,8 @@ package model
 
 import (
 	"errors"
-	"goModel/message"
-	"goModel/meta"
+	"github.com/object-model/goModel/message"
+	"github.com/object-model/goModel/meta"
 	"sync"
 	"time"
 )

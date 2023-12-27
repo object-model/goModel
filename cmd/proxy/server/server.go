@@ -3,9 +3,9 @@ package server
 import (
 	"fmt"
 	"github.com/gorilla/websocket"
-	"goModel/message"
-	"goModel/meta"
-	"goModel/rawConn"
+	"github.com/object-model/goModel/message"
+	"github.com/object-model/goModel/meta"
+	"github.com/object-model/goModel/rawConn"
 	"io"
 	"log"
 	"net"
