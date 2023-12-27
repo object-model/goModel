@@ -1,4 +1,4 @@
-module goModel
+module github.com/object-model/goModel
 
 go 1.16
 
