@@ -24,6 +24,28 @@ golang版本的物模型，包含物模型框架、远端代理服务和代码�
 
 1. 完成自动重连相关功能
 2. 物模型添加统一的建立连接接口Dial
+3. 代理创建物模型时的元信息赋值为空元信息，以防止访问为nil的元信息
+
+   原先的做法是元信息默认为空，这样会导致在代理还未获取到其元信息之前，访问元信息字段会导致空指针访问!
+
+   ```go
+   func (s *Server) onRemoveConn(connections map[string]connection, m *model,
+   	respWaiters map[string]string) {
+   	
+       // NOTE: 此时还未获取到m的元信息, 物模型连接连接就早早地要删除和关闭了
+       // NOTE: 此时m.MetaInfo为nil, 因此会导致空指针访问
+       if conn, seen := connections[m.MetaInfo.Name]; seen && m.isAdded() {
+           ...
+       }
+       ...
+   }
+   ```
+
+## 20231222
+
+1. 简化代理在正式添加物模型之前的转发报文处理逻辑
+
+   直接使用缓冲区缓存需要代理转发的报文，不开启单独的协程
 
 ## 20231221
 
