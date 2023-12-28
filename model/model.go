@@ -39,6 +39,9 @@ func (c CallRequestFunc) OnCallReq(name string, args message.RawArgs) message.Re
 	return c(name, args)
 }
 
+// Model 表示物模型, 提供了元信息查询、状态和事件发布、与其他物模型建立连接、运行TCP服务和WebSocket服务功能.
+// 若物模型的元信息包含方法, 并通过 WithCallReqHandler 或 WithCallReqFunc 注册了有效的调用请求回调,
+// 在收到有效的调用请求报文时, 物模型将自动触发调用请求回调.
 type Model struct {
 	meta           *meta.Meta               // 元信息
 	connLock       sync.RWMutex             // 保护 allConn
@@ -75,10 +78,14 @@ func WithVerifyResp() ModelOption {
 	}
 }
 
+// NewEmptyModel 创建一个状态、事件、方法都为空的物模型.
 func NewEmptyModel() *Model {
 	return New(meta.NewEmptyMeta())
 }
 
+// LoadFromFile 从文件file中加载元信息, 设置元信息模板参数为tmpl, 并利用加载的元信息和配置参数opts创建物模型
+// 返回创建的物模型和错误信息.
+// 如果加载失败, LoadFromFile 会返回由 NewEmptyModel() 创建的空物模型和错误信息, LoadFromFile 不会返回值为nil的物模型.
 func LoadFromFile(file string, tmpl meta.TemplateParam, opts ...ModelOption) (*Model, error) {
 	content, err := ioutil.ReadFile(file)
 	if err != nil {
@@ -88,12 +95,16 @@ func LoadFromFile(file string, tmpl meta.TemplateParam, opts ...ModelOption) (*M
 	return LoadFromBuff(content, tmpl, opts...)
 }
 
+// LoadFromBuff 从缓存buff中加载元信息, 设置元信息模板参数为tmpl, 并利用加载的元信息和配置参数opts创建物模型
+// 返回创建的物模型和错误信息.
+// 如果加载失败, LoadFromBuff 会返回由 NewEmptyModel() 创建的空物模型和错误信息, LoadFromBuff 不会返回值为nil的物模型.
 func LoadFromBuff(buff []byte, tmpl meta.TemplateParam, opts ...ModelOption) (*Model, error) {
 	parsed, err := meta.Parse(buff, tmpl)
 
 	return New(parsed, opts...), err
 }
 
+// New 根据参数opts创建元信息为meta的物模型并返回这个新创建的物模型.
 func New(meta *meta.Meta, opts ...ModelOption) *Model {
 	ans := &Model{
 		meta:    meta,
@@ -107,10 +118,15 @@ func New(meta *meta.Meta, opts ...ModelOption) *Model {
 	return ans
 }
 
+// Meta 返回物模型m所加载的元信息.
 func (m *Model) Meta() *meta.Meta {
 	return m.meta
 }
 
+// ListenServeTCP 开启对地址addr的监听, 并等待其他客户端物模型与m建立TCP连接.
+// 所有建立的TCP连接自动开启 keep-alive 选项. ListenServeTCP 总是返回不为nil的错误信息.
+//
+// 客户端物模型可以同过 Dial("tcp@addr", opts...) 或者 DialTcp(addr, opts...) 与m建立连接.
 func (m *Model) ListenServeTCP(addr string) error {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -131,6 +147,11 @@ func (m *Model) ListenServeTCP(addr string) error {
 	}
 }
 
+// ListenServeWebSocket 在地址addr上开启http服务, 并等待其他客户端物模型与m建立WebSocket连接.
+// 对于每个建立的WebSocket连接, m都会定时发送PING报文, 如果客户端未及时回复PONG报文, m将主动断开连接.
+// ListenServeWebSocket 总是返回不为nil的错误信息.
+//
+// 客户端物模型可以同过 Dial("ws@addr", opts...) 或者 DialWebSocket("ws://addr", opts...) 与m建立连接.
 func (m *Model) ListenServeWebSocket(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(writer http.ResponseWriter, request *http.Request) {
@@ -144,6 +165,8 @@ func (m *Model) ListenServeWebSocket(addr string) error {
 	return http.ListenAndServe(addr, mux)
 }
 
+// PushState 推送名称为name, 数据为data的状态, m的所有连接只要是订阅了该状态, 都会收到该状态报文,
+// 参数verify表示是否根据m的元信息校验状态数据, 若校验不通过返回错误信息, 其他情况都返回nil.
 func (m *Model) PushState(name string, data interface{}, verify bool) error {
 	// 首先验证推送数据是否符合物模型元信息
 	if verify {
@@ -168,6 +191,8 @@ func (m *Model) PushState(name string, data interface{}, verify bool) error {
 	return nil
 }
 
+// PushEvent 推送名称为name, 参数为args的事件, m的所有连接只要是订阅了该事件, 都会收到该事件报文,
+// 参数verify表示是否根据m的元信息校验事件参数, 若校验不通过返回错误信息, 其他情况都返回nil.
 func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	// 首先验证推送事件参数据是否符合物模型元信息
 	if verify {
@@ -192,6 +217,17 @@ func (m *Model) PushEvent(name string, args message.Args, verify bool) error {
 	return nil
 }
 
+// Dial 根据连接配置opts使物模型m与地址为addr的服务端物模型建立连接, 返回所建立的连接和错误信息,
+// 若建立连接成功, 返回的错误信息为nil, 若失败, 返回的连接为nil.
+//
+// 参数addr的有效格式为：network@ip:port
+// 例如:
+// 		tcp@localhost:8080
+// 		tcp@192.168.1.51:http
+// 		 ws@192.168.1.51:9090
+// 协议network决定采用何种协议与服务端物模型建立连接:
+// 		tcp: 使用TCP协议与服务端物模型建立连接, 等同于调用 DialTcp("ip:port", opts...)
+// 		 ws: 使用WebSocket协议与服务端建立连接, 等同于调用 DialWebSocket("ws://ip:port", opts...)
 func (m *Model) Dial(addr string, opts ...ConnOption) (*Connection, error) {
 	i := strings.Index(addr, "@")
 	if i == -1 {
@@ -211,6 +247,13 @@ func (m *Model) Dial(addr string, opts ...ConnOption) (*Connection, error) {
 	return nil, fmt.Errorf("network %q is NOT supported", network)
 }
 
+// DialTcp 根据连接配置opts使物模型m与地址为addr的服务端物模型建立TCP连接, 返回所建立的连接和错误信息.
+//
+// 参数addr的有效格式为: ip:port
+// 例如:
+// 		localhost:8080
+//		192.168.1.51:http
+// 		192.168.1.51:9090
 func (m *Model) DialTcp(addr string, opts ...ConnOption) (*Connection, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -227,6 +270,12 @@ func (m *Model) DialTcp(addr string, opts ...ConnOption) (*Connection, error) {
 	return ans, nil
 }
 
+// DialWebSocket 根据连接配opts使物模型m与地址为addr的服务端物模型建立WebSocket连接, 返回所建立的连接和错误信息.
+//
+// 参数addr的有效格式为: ws://ip:port
+// 例如:
+// 		ws://192.168.1.51:8080
+// 		ws://localhost:8080
 func (m *Model) DialWebSocket(addr string, opts ...ConnOption) (*Connection, error) {
 	raw, _, err := websocket.DefaultDialer.Dial(addr, nil)
 	if err != nil {
