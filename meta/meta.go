@@ -24,42 +24,48 @@ var validType = map[string]struct{}{
 
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
+// OptionInfo 为选项元信息
 type OptionInfo struct {
-	Value       interface{} `json:"value"`
-	Description string      `json:"description"`
+	Value       interface{} `json:"value"`       // 选项值
+	Description string      `json:"description"` // 选项描述
 }
 
+// RangeInfo 为范围约束元信息
 type RangeInfo struct {
-	Max     interface{}  `json:"max,omitempty"`
-	Min     interface{}  `json:"min,omitempty"`
-	Option  []OptionInfo `json:"option,omitempty"`
-	Default interface{}  `json:"default,omitempty"`
+	Max     interface{}  `json:"max,omitempty"`     // 最大值
+	Min     interface{}  `json:"min,omitempty"`     // 最小值
+	Option  []OptionInfo `json:"option,omitempty"`  // 可选项
+	Default interface{}  `json:"default,omitempty"` // 默认值
 }
 
+// ParamMeta 为参数元信息
 type ParamMeta struct {
-	Name        *string     `json:"name,omitempty"`
-	Description *string     `json:"description,omitempty"`
-	Type        string      `json:"type"`
-	Element     *ParamMeta  `json:"element,omitempty"`
-	Fields      []ParamMeta `json:"fields,omitempty"`
-	Length      *uint       `json:"length,omitempty"`
-	Unit        *string     `json:"unit,omitempty"`
-	Range       *RangeInfo  `json:"range,omitempty"`
+	Name        *string     `json:"name,omitempty"`        // 参数名
+	Description *string     `json:"description,omitempty"` // 参数描述
+	Type        string      `json:"type"`                  // 参数类型
+	Element     *ParamMeta  `json:"element,omitempty"`     // 数组或者切片元素的元信息, 仅在 Type 为数组或切片时有效
+	Fields      []ParamMeta `json:"fields,omitempty"`      // 结构体类型参数的字段元信息, 仅在 Type 为结构体时有效
+	Length      *uint       `json:"length,omitempty"`      // 数组长度, 仅在 Type 为 数组时有效
+	Unit        *string     `json:"unit,omitempty"`        // 参数单位
+	Range       *RangeInfo  `json:"range,omitempty"`       // 参数范围, 仅在 Type 为 int uint float string时有效
 }
 
+// EventMeta 为事件元信息
 type EventMeta struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Args        []ParamMeta `json:"args"`
+	Name        string      `json:"name"`        // 事件名称
+	Description string      `json:"description"` // 事件描述
+	Args        []ParamMeta `json:"args"`        // 事件参数
 }
 
+// MethodMeta 为方法元信息
 type MethodMeta struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Args        []ParamMeta `json:"args"`
-	Response    []ParamMeta `json:"response"`
+	Name        string      `json:"name"`        // 方法名称
+	Description string      `json:"description"` // 方法描述
+	Args        []ParamMeta `json:"args"`        // 方法参数
+	Response    []ParamMeta `json:"response"`    // 方法响应
 }
 
+// Meta 为物模型元信息
 type Meta struct {
 	Name        string       `json:"name"`        // 物模型名称
 	Description string       `json:"description"` // 物模型描述
@@ -77,6 +83,7 @@ type Meta struct {
 	encodeOnce sync.Once // 只序列化一次
 }
 
+// TemplateParam 为元信息模板参数
 type TemplateParam map[string]string
 
 // AllStates 返回物模型元信息m中的所有状态全名.
@@ -127,6 +134,7 @@ func (m *Meta) ToJSON() []byte {
 	return m.json
 }
 
+// VerifyState 验证名称为name数据为data的状态是否符合元信息m, 如果符合返回nil, 如果不符合返回错误信息.
 func (m *Meta) VerifyState(name string, data interface{}) error {
 	if index, seen := m.stateIndex[name]; !seen {
 		return fmt.Errorf("NO state %q", name)
@@ -135,6 +143,7 @@ func (m *Meta) VerifyState(name string, data interface{}) error {
 	}
 }
 
+// VerifyEvent 验证名为name参数为args的事件是否符合元信息m, 如果符合返回nil, 如果不符合返回错误信息.
 func (m *Meta) VerifyEvent(name string, args message.Args) error {
 	index, seen := m.eventIndex[name]
 	if !seen {
@@ -167,6 +176,7 @@ func (m *Meta) VerifyEvent(name string, args message.Args) error {
 	return nil
 }
 
+// VerifyMethodArgs 验证名为name参数为args的调用请求是否符合元信息m, 如果符合返回nil, 如果不符合返回错误信息.
 func (m *Meta) VerifyMethodArgs(name string, args message.Args) error {
 	index, seen := m.methodIndex[name]
 	if !seen {
@@ -199,6 +209,7 @@ func (m *Meta) VerifyMethodArgs(name string, args message.Args) error {
 	return nil
 }
 
+// VerifyMethodResp 验证名为name返回值为resp的调用响应是否符合元信息m, 如果符合返回nil, 如果不符合返回错误信息.
 func (m *Meta) VerifyMethodResp(name string, resp message.Resp) error {
 	index, seen := m.methodIndex[name]
 	if !seen {
@@ -916,6 +927,10 @@ func (m *Meta) setTemplate(param TemplateParam) (err error) {
 	return
 }
 
+// Parse 从JSON数据rawData中解析物模型元信息并根据templateParam设置名称模板, 返回解析的元信息和错误.
+//
+// 如果解析和设置模板中出错, Parse 返回的元信息为通过调用函数 NewEmptyMeta() 返回的空元信息, '
+// Parse 保证不会返回值为nil的元信息.
 func Parse(rawData []byte, templateParam TemplateParam) (*Meta, error) {
 	// 1. 解析JSON数据
 	var value interface{}
@@ -2056,6 +2071,17 @@ const empty = `
 }
 `
 
+// NewEmptyMeta 返回一个不包含任何状态、事件和方法的空元信息.
+//
+// NewEmptyMeta 返回的元信息可以用下面JSON串表示:
+// {
+//		"name": "__empty__/{uuid}",
+//		"description": "empty model meta information",
+//		"state": [],
+//		"event": [],
+//		"method": []
+// }
+// 其中模板参数uuid随机生成
 func NewEmptyMeta() *Meta {
 	ans, err := Parse([]byte(empty), TemplateParam{
 		"uuid": uuid.New().String(),
