@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-const Version = "0.0.1"
+const Version = "0.0.5"
 
 const Desc = "Proxy is object model proxy server which can transmit model message " +
 	"and also provides methods and events itself. " +
