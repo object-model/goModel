@@ -4,6 +4,35 @@ golang版本的物模型，包含物模型框架、远端代理服务和代码�
 
 # 更新日志
 
+## 20240107
+
+1. 解决代理在正式添加连接前缓存报文处理逻辑的bug
+
+   出现原因是客户端与代理连接后立即同步调用方法，此时代理还没有正式添加连接：
+
+   ```go
+   proxy := m.Dial("tcp@localhost:8080")
+   rawResp, err := proxy.Call("calc/sqrt", message.Args{
+     "x": 100,
+   })
+   ```
+
+   由于客户端一直在等待响应而一只没有向代理发送任何报文，因此在代理端，连接的`reader`方法一直处于挂起状态，因此，即使代理已经正式添加了连接，但由于`reader`处于阻塞态，之前缓存的报文也一直不能处理，从而导致客户端一直无法解除等待。
+
+   解决方法：代理正式添加连接之后，主动发送一包元信息查询报文，确保`reader`解除阻塞，从而将缓存的报文处理掉：
+
+   ```go
+   	// 添加链路, 并通知已添加
+   	connections[m.MetaInfo.Name] = conn
+   	m.setAdded()
+   
+   	// NOTE: 目的是立即唤醒reader, 保证缓存的报文能及时处理
+   	m.writeChan <- message.EncodeQueryMetaMsg()
+   
+   ```
+
+2. 优化代理的报文处理流程，使用map代替switch-case
+
 ## 20231228
 
 1. 完成包model的所有接口注释说明

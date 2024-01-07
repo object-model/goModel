@@ -19,6 +19,8 @@ type msgPack struct {
 	fullData []byte
 }
 
+type msgHandler func(msg msgPack) error
+
 type stateOrEventMessage struct {
 	Name     string // 状态或者事件名称
 	FullData []byte // 全报文原始数据，是Message类型序列化的结果
@@ -67,6 +69,7 @@ type model struct {
 	log             *log.Logger                   // 记录收发数据
 	buffer          []msgPack                     // 挂起的报文
 	closeReason     string                        // 连接关闭原因
+	msgHandlers     map[string]msgHandler         // 报文消息处理函数集合
 }
 
 func (m *model) quitWriter() {
@@ -129,14 +132,19 @@ func (m *model) reader() {
 		m.log.Println("<--", m.RemoteAddr().String(), string(data))
 
 		// 解析JSON报文
-		msg := message.RawMessage{}
-		if err = jsoniter.Unmarshal(data, &msg); err != nil {
+		rawMessage := message.RawMessage{}
+		if err = jsoniter.Unmarshal(data, &rawMessage); err != nil {
 			m.closeReason = err.Error()
 			break
 		}
 
 		// 处理包
-		if err = m.dealMsg(msg.Type, msg.Payload, data); err != nil {
+		msg := msgPack{
+			Type:     rawMessage.Type,
+			payload:  rawMessage.Payload,
+			fullData: data,
+		}
+		if err = m.dealMsg(msg); err != nil {
 			m.closeReason = err.Error()
 			break
 		}
@@ -176,70 +184,61 @@ func (m *model) writer() {
 	}
 }
 
-func (m *model) dealMsg(msgType string, payload []byte, fullData []byte) error {
-	switch msgType {
-	// NOTE: 所有需要处理或者转发的报文都需要等待代理完成添加,
-	// NOTE: 并等待添加前排队挂起的报文都处理完毕或者出错!
-	// NOTE: 目的是严格保证报文的处理顺序!
-	case "set-subscribe-state", "add-subscribe-state",
-		"remove-subscribe-state", "clear-subscribe-state",
-		"set-subscribe-event", "add-subscribe-event",
-		"remove-subscribe-event", "clear-subscribe-event",
-		"state", "event", "call", "response":
-		select {
-		case <-m.added:
-			for len(m.buffer) > 0 {
-				if err := m.dealTransMsg(msgType, payload, fullData); err != nil {
-					return err
-				}
-				m.buffer = m.buffer[1:]
+func (m *model) dealMsg(msg msgPack) error {
+	select {
+	case <-m.added:
+		for len(m.buffer) > 0 {
+			if err := m.onMsg(m.buffer[0]); err != nil {
+				return err
 			}
-			return m.dealTransMsg(msgType, payload, fullData)
-		default:
-			m.buffer = append(m.buffer, msgPack{
-				Type:     msgType,
-				payload:  payload,
-				fullData: fullData,
-			})
+			m.buffer = m.buffer[1:]
 		}
-	case "query-meta":
-		return m.onQueryMeta()
-	case "meta-info":
-		return m.onMetaInfo(payload)
+		return m.onMsg(msg)
 	default:
-		return fmt.Errorf("invalid message type %s", msgType)
+		if isTransMsg(msg) {
+			m.buffer = append(m.buffer, msg)
+			return nil
+		}
 	}
-	return nil
+	return m.onMsg(msg)
+
 }
 
-func (m *model) dealTransMsg(msgType string, payload []byte, fullData []byte) error {
-	switch msgType {
-	case "set-subscribe-state", "add-subscribe-state",
-		"remove-subscribe-state", "clear-subscribe-state":
-		return m.onSubState(msgType, payload)
-	case "set-subscribe-event", "add-subscribe-event",
-		"remove-subscribe-event", "clear-subscribe-event":
-		return m.onSubEvent(msgType, payload)
-	case "state":
-		return m.onState(payload, fullData)
-	case "event":
-		return m.onEvent(payload, fullData)
-	case "call":
-		return m.onCall(payload, fullData)
-	case "response":
-		return m.onResp(payload, fullData)
-	}
-	return nil
+var trans = map[string]struct{}{
+	"set-subscribe-state":    {},
+	"add-subscribe-state":    {},
+	"remove-subscribe-state": {},
+	"clear-subscribe-state":  {},
+	"set-subscribe-event":    {},
+	"add-subscribe-event":    {},
+	"remove-subscribe-event": {},
+	"clear-subscribe-event":  {},
+	"state":                  {},
+	"event":                  {},
+	"call":                   {},
+	"response":               {},
 }
 
-func (m *model) onSubState(Type string, payload []byte) error {
+func isTransMsg(msg msgPack) bool {
+	_, seen := trans[msg.Type]
+	return seen
+}
+
+func (m *model) onMsg(msg msgPack) error {
+	if handler, seen := m.msgHandlers[msg.Type]; seen {
+		return handler(msg)
+	}
+	return fmt.Errorf("invalid message type %s", msg.Type)
+}
+
+func (m *model) onSubState(msg msgPack) error {
 	var states []string
-	if err := jsoniter.Unmarshal(payload, &states); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &states); err != nil {
 		return err
 	}
 
 	var option int
-	switch Type {
+	switch msg.Type {
 	case "set-subscribe-state":
 		option = message.SetSub
 	case "add-subscribe-state":
@@ -258,15 +257,15 @@ func (m *model) onSubState(Type string, payload []byte) error {
 	return nil
 }
 
-func (m *model) onSubEvent(Type string, payload []byte) error {
+func (m *model) onSubEvent(msg msgPack) error {
 	var events []string
-	if err := jsoniter.Unmarshal(payload, &events); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &events); err != nil {
 		return err
 	}
 
 	var option int
 
-	switch Type {
+	switch msg.Type {
 	case "set-subscribe-event":
 		option = message.SetSub
 	case "add-subscribe-event":
@@ -285,9 +284,9 @@ func (m *model) onSubEvent(Type string, payload []byte) error {
 	return nil
 }
 
-func (m *model) onState(payload []byte, fullData []byte) error {
+func (m *model) onState(msg msgPack) error {
 	var state message.StatePayload
-	if err := jsoniter.Unmarshal(payload, &state); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &state); err != nil {
 		return err
 	}
 
@@ -303,14 +302,14 @@ func (m *model) onState(payload []byte, fullData []byte) error {
 
 	m.stateBroadcast <- stateOrEventMessage{
 		Name:     state.Name,
-		FullData: fullData,
+		FullData: msg.fullData,
 	}
 	return nil
 }
 
-func (m *model) onEvent(payload []byte, fullData []byte) error {
+func (m *model) onEvent(msg msgPack) error {
 	var event message.EventPayload
-	if err := jsoniter.Unmarshal(payload, &event); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &event); err != nil {
 		return err
 	}
 
@@ -326,14 +325,14 @@ func (m *model) onEvent(payload []byte, fullData []byte) error {
 
 	m.eventBroadcast <- stateOrEventMessage{
 		Name:     event.Name,
-		FullData: fullData,
+		FullData: msg.fullData,
 	}
 	return nil
 }
 
-func (m *model) onCall(payload []byte, fullData []byte) error {
+func (m *model) onCall(msg msgPack) error {
 	var call message.CallPayload
-	if err := jsoniter.Unmarshal(payload, &call); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &call); err != nil {
 		return err
 	}
 
@@ -361,14 +360,14 @@ func (m *model) onCall(payload []byte, fullData []byte) error {
 		Method:   methodName,
 		UUID:     call.UUID,
 		Args:     call.Args,
-		FullData: fullData,
+		FullData: msg.fullData,
 	}
 	return nil
 }
 
-func (m *model) onResp(payload []byte, fullData []byte) error {
+func (m *model) onResp(msg msgPack) error {
 	var resp message.ResponsePayload
-	if err := jsoniter.Unmarshal(payload, &resp); err != nil {
+	if err := jsoniter.Unmarshal(msg.payload, &resp); err != nil {
 		return err
 	}
 
@@ -380,20 +379,20 @@ func (m *model) onResp(payload []byte, fullData []byte) error {
 	m.respChan <- responseMessage{
 		Source:   m.MetaInfo.Name,
 		UUID:     resp.UUID,
-		FullData: fullData,
+		FullData: msg.fullData,
 	}
 
 	return nil
 }
 
-func (m *model) onQueryMeta() error {
+func (m *model) onQueryMeta(msgPack) error {
 	m.writeChan <- proxyMetaMessage
 	return nil
 }
 
-func (m *model) onMetaInfo(payload []byte) error {
+func (m *model) onMetaInfo(msg msgPack) error {
 	m.onGetMetaOnce.Do(func() {
-		m.MetaRaw = payload
+		m.MetaRaw = msg.payload
 		close(m.metaGotChan)
 	})
 

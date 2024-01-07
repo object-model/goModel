@@ -248,6 +248,9 @@ func (s *Server) onAddConn(connections map[string]connection, m *model) {
 	// 添加链路, 并通知已添加
 	connections[m.MetaInfo.Name] = conn
 	m.setAdded()
+
+	// NOTE: 目的是立即唤醒reader, 保证缓存的报文能及时处理
+	m.writeChan <- message.EncodeQueryMetaMsg()
 }
 
 func (s *Server) onRemoveConn(connections map[string]connection, m *model,
@@ -370,6 +373,23 @@ func (s *Server) addModelConnection(conn rawConn.RawConn) {
 		MetaInfo:       meta.NewEmptyMeta(),
 		log:            s.log,
 		buffer:         make([]msgPack, 0, 256),
+	}
+
+	ans.msgHandlers = map[string]msgHandler{
+		"set-subscribe-state":    ans.onSubState,
+		"add-subscribe-state":    ans.onSubState,
+		"remove-subscribe-state": ans.onSubState,
+		"clear-subscribe-state":  ans.onSubState,
+		"set-subscribe-event":    ans.onSubEvent,
+		"add-subscribe-event":    ans.onSubEvent,
+		"remove-subscribe-event": ans.onSubEvent,
+		"clear-subscribe-event":  ans.onSubEvent,
+		"state":                  ans.onState,
+		"event":                  ans.onEvent,
+		"call":                   ans.onCall,
+		"response":               ans.onResp,
+		"query-meta":             ans.onQueryMeta,
+		"meta-info":              ans.onMetaInfo,
 	}
 
 	go ans.writer()
