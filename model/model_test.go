@@ -789,6 +789,16 @@ func (s *StateEventSuite) TestDealInvalidStateMsg() {
 
 	testCases := []TestCase{
 		{
+			msg:  []byte(`{"type":"state"}`),
+			desc: "缺少payload字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"state","payload":null}`),
+			desc: "payload为null",
+		},
+
+		{
 			msg:  []byte(`{"type":"state","payload":[]}`),
 			desc: "payload不是对象",
 		},
@@ -898,6 +908,16 @@ func (s *StateEventSuite) TestDealInvalidEventMsg() {
 	}
 
 	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"event"}`),
+			desc: "缺少payload字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"event","payload":null}`),
+			desc: "payload为null",
+		},
+
 		{
 			msg:  []byte(`{"type":"event","payload":[]}`),
 			desc: "payload不是对象",
@@ -1191,6 +1211,16 @@ func TestDealInvalidCallMsg(t *testing.T) {
 	}
 
 	testCases := []TestCase{
+		{
+			msg:  []byte(`{"type":"call"}`),
+			desc: "缺少payload字段",
+		},
+
+		{
+			msg:  []byte(`{"type":"call","payload":null}`),
+			desc: "payload为null",
+		},
+
 		{
 			msg:  []byte(`{"type":"call","payload":[]}`),
 			desc: "payload不是对象",
